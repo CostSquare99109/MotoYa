@@ -65,7 +65,7 @@ export default function WorkerDashboard() {
   const [statusMsg,      setStatusMsg]      = useState('');
   const watchIdRef = useRef<number | null>(null);
 
-  const driverId = (user as any)?.driver_id ?? '';
+  const driverId = user?.driver_id ?? '';
   const wsUrl    = token && driverId && isOnline
     ? `${WS_BASE}/ws/location/${driverId}?token=${token}`
     : '';
@@ -197,17 +197,17 @@ export default function WorkerDashboard() {
     }
   };
 
-  const tripPickup:  [number, number] | null = activeTrip
-    ? (activeTrip as any).pickup_location
-      ? [(activeTrip as any).pickup_location.lat, (activeTrip as any).pickup_location.lng]
-      : null
-    : null;
+ const tripPickup: [number, number] | null = activeTrip
+ ? activeTrip.pickup_location
+ ? [activeTrip.pickup_location.lat, activeTrip.pickup_location.lng]
+ : null
+ : null;
 
-  const tripDropoff: [number, number] | null = activeTrip
-    ? (activeTrip as any).dropoff_location
-      ? [(activeTrip as any).dropoff_location.lat, (activeTrip as any).dropoff_location.lng]
-      : null
-    : null;
+ const tripDropoff: [number, number] | null = activeTrip
+ ? activeTrip.dropoff_location
+ ? [activeTrip.dropoff_location.lat, activeTrip.dropoff_location.lng]
+ : null
+ : null;
 
   return (
     <div className="h-screen flex flex-col overflow-hidden bg-[#f8fafc]">
@@ -219,7 +219,7 @@ export default function WorkerDashboard() {
             <Bike className="w-5 h-5 text-white" />
           </div>
           <div>
-            <p className="font-bold text-white text-sm">{(user as any)?.full_name ?? 'Conductor'}</p>
+            <p className="font-bold text-white text-sm">{user?.full_name ?? 'Conductor'}</p>
             <p className="text-xs text-slate-400 flex items-center gap-1.5">
               {wsStatus === 'connected'
                 ? <><Wifi className="w-3 h-3 text-green-400" />Conectado</>

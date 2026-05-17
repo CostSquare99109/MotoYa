@@ -161,7 +161,7 @@ export default function LiveMap() {
     setLoadingTrips(true);
     try {
       const res  = await fetch(`${API}/api/trips?status=pending&limit=50`, { headers: authH() });
-      const data: any[] = await res.json().catch(() => []);
+      const data: Record<string, unknown>[] = await res.json().catch(() => []);
       const trips: PendingTrip[] = data.map(t => ({
         id:               t.id,
         passenger_name:   t.passenger_name  ?? 'Sin nombre',

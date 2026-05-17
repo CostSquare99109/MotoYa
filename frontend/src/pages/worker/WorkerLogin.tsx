@@ -1,28 +1,21 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import { useStore } from '@/hooks/useStore';
-import { Bike, Eye, EyeOff, Loader2, MapPin, Shield, Phone } from 'lucide-react';
+import { Bike, Loader2, MapPin, Shield, Phone } from 'lucide-react';
+import { authFetch, PasswordField, ErrorAlert, AuthForm } from '@/components/auth/AuthComponents';
 
-const API        = import.meta.env.VITE_API_URL  ?? '';
-const CITY_NAME  = import.meta.env.VITE_CITY_NAME  ?? 'Carepa, Antioquia';
+const API = import.meta.env.VITE_API_URL ?? '';
+const CITY_NAME = import.meta.env.VITE_CITY_NAME ?? 'Carepa, Antioquia';
 const CITY_LABEL = import.meta.env.VITE_CITY_LABEL ?? `${CITY_NAME} · Colombia`;
-
-type LoginError = { detail?: string; message?: string } | string;
-
-function readError(e: LoginError): string {
-  if (typeof e === 'string') return e;
-  return e.detail ?? e.message ?? 'Error al ingresar';
-}
 
 export default function WorkerLogin() {
   const navigate = useNavigate();
   const { setToken, setUser } = useStore();
 
-  const [phone,    setPhone]    = useState('');
+  const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
-  const [showPwd,  setShowPwd]  = useState(false);
-  const [loading,  setLoading]  = useState(false);
-  const [error,    setError]    = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -31,46 +24,22 @@ export default function WorkerLogin() {
 
     try {
       const body = new URLSearchParams();
-      // ✅ username = teléfono del conductor (el backend busca por Driver.phone)
       body.append('username', phone.trim());
       body.append('password', password);
 
-      const res = await fetch(`${API}/api/auth/worker/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: body.toString(),
-      });
-
-      const data = await res.json().catch(() => ({}));
-
-      if (!res.ok) {
-        // Mensajes de error legibles según el código HTTP
-        if (res.status === 404) {
-          throw new Error('No existe un conductor con ese número de teléfono');
-        }
-        if (res.status === 403) {
-          throw new Error(readError(data) || 'Cuenta suspendida o sin acceso');
-        }
-        if (res.status === 401) {
-          throw new Error('Contraseña incorrecta');
-        }
-        throw new Error(readError(data) || `Error ${res.status}`);
-      }
-
-      // ✅ Guardar token + datos del conductor (driver_id, phone, rating, etc.)
+      const data = await authFetch(`${API}/api/auth/worker/login`, body);
       setToken(data.access_token);
       setUser({
-        id:               data.user.id,
-        driver_id:        data.user.driver_id,
-        full_name:        data.user.full_name,
-        phone:            data.user.phone,
-        email:            data.user.email,
-        role:             'worker',
-        rating:           data.user.rating,
-        total_trips:      data.user.total_trips,
+        id: data.user.id,
+        driver_id: data.user.driver_id,
+        full_name: data.user.full_name,
+        phone: data.user.phone,
+        email: data.user.email,
+        role: 'worker',
+        rating: data.user.rating,
+        total_trips: data.user.total_trips,
         profile_photo_url: data.user.profile_photo_url,
       });
-
       navigate('/worker');
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Error inesperado');
@@ -110,66 +79,44 @@ export default function WorkerLogin() {
           </div>
 
           {/* Form */}
-          <form onSubmit={handleLogin} className="px-8 pb-8 space-y-4">
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium text-slate-300 flex items-center gap-2">
-                <Phone className="w-3.5 h-3.5 text-slate-400" />
-                Número de teléfono
-              </label>
-              <input
-                type="tel"
-                placeholder="3001234567"
-                value={phone}
-                onChange={e => setPhone(e.target.value)}
-                required
-                autoComplete="tel"
-                className="w-full h-11 px-4 rounded-xl bg-white/5 border border-white/10 text-white placeholder-slate-500 focus:outline-none focus:border-[#f97316] focus:ring-1 focus:ring-[#f97316] transition-all"
-              />
-              <p className="text-xs text-slate-500">El mismo número registrado por el administrador</p>
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium text-slate-300">Contraseña</label>
-              <div className="relative">
-                <input
-                  type={showPwd ? 'text' : 'password'}
-                  placeholder="••••••••"
-                  value={password}
-                  onChange={e => setPassword(e.target.value)}
-                  required
-                  autoComplete="current-password"
-                  className="w-full h-11 px-4 pr-11 rounded-xl bg-white/5 border border-white/10 text-white placeholder-slate-500 focus:outline-none focus:border-[#f97316] focus:ring-1 focus:ring-[#f97316] transition-all"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPwd(v => !v)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors"
-                >
-                  {showPwd ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
-              </div>
-            </div>
-
-            {error && (
-              <div className="bg-red-500/10 border border-red-500/20 text-red-400 text-sm px-4 py-3 rounded-xl">
-                {error}
-              </div>
-            )}
-
-            <button
-              type="submit"
-              disabled={loading || !phone || !password}
-              className="w-full h-11 rounded-xl bg-[#f97316] hover:bg-[#ea580c] text-white font-semibold transition-all disabled:opacity-50 flex items-center justify-center gap-2 mt-2"
+          <div className="px-8 pb-8">
+            <AuthForm
+              onSubmit={handleLogin}
+              loading={loading}
+              loadingText={<><Loader2 className="w-4 h-4 animate-spin" />Ingresando...</>}
+              submitText="Iniciar turno"
+              variant="dark"
+              disabled={!phone || !password}
             >
-              {loading
-                ? <><Loader2 className="w-4 h-4 animate-spin" />Ingresando...</>
-                : 'Iniciar turno'}
-            </button>
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium text-slate-300 flex items-center gap-2">
+                  <Phone className="w-3.5 h-3.5 text-slate-400" />
+                  Número de teléfono
+                </label>
+                <input
+                  type="tel"
+                  placeholder="3001234567"
+                  value={phone}
+                  onChange={e => setPhone(e.target.value)}
+                  required
+                  autoComplete="tel"
+                  className="w-full h-11 px-4 rounded-xl bg-white/5 border border-white/10 text-white placeholder-slate-500 focus:outline-none focus:border-[#f97316] focus:ring-1 focus:ring-[#f97316] transition-all"
+                />
+                <p className="text-xs text-slate-500">El mismo número registrado por el administrador</p>
+              </div>
 
-            <p className="text-center text-xs text-slate-500 flex items-center justify-center gap-1 pt-1">
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium text-slate-300">Contraseña</label>
+                <PasswordField value={password} onChange={setPassword} variant="dark" />
+              </div>
+
+              <ErrorAlert message={error} variant="dark" />
+            </AuthForm>
+
+            <p className="text-center text-xs text-slate-500 flex items-center justify-center gap-1 pt-4">
               <MapPin className="w-3 h-3" />{CITY_LABEL}
             </p>
-          </form>
+          </div>
         </div>
 
         <p className="text-center text-xs text-slate-600 mt-4">

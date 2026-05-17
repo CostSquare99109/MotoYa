@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Layers, Zap, Phone, Star, Navigation2, X, Locate } from "lucide-react";
 import type { NearbyDriver } from "@/types";
+import type * as L from "leaflet";
 
 /* ─── Leaflet loader ────────────────────────────────────────────── */
 let leafletReady = false;
@@ -50,9 +51,9 @@ const API = import.meta.env.VITE_API_URL ?? "";
 /* ─── Component ─────────────────────────────────────────────────── */
 export default function MapPanel() {
   const mapRef = useRef<HTMLDivElement>(null);
-  const instanceRef = useRef<any>(null);
-  const heatLayerRef = useRef<any>(null);
-  const markersRef = useRef<any[]>([]);
+ const instanceRef = useRef<L.Map | null>(null);
+ const heatLayerRef = useRef<L.Layer | null>(null);
+ const markersRef = useRef<L.Marker[]>([]);
 
   const [showHeatmap, setShowHeatmap] = useState(true);
   const [showDrivers, setShowDrivers] = useState(true);
@@ -111,7 +112,7 @@ export default function MapPanel() {
   useEffect(() => {
     loadLeaflet().then(() => {
       if (!mapRef.current || instanceRef.current) return;
-      const L = (window as any).L;
+      const L = window.L;
       const center = mapCenter ?? { lat: 7.7667, lng: -76.6550 };
       const map = L.map(mapRef.current, {
         center: [center.lat, center.lng],
@@ -140,7 +141,7 @@ export default function MapPanel() {
   /* ── Heatmap layer ── */
   useEffect(() => {
     if (!ready || demandZones.length === 0) return;
-    const L = (window as any).L;
+    const L = window.L;
     const map = instanceRef.current;
     if (heatLayerRef.current) { map.removeLayer(heatLayerRef.current); heatLayerRef.current = null; }
     if (showHeatmap && heatReady && L.heatLayer) {
@@ -155,7 +156,7 @@ export default function MapPanel() {
   /* ── Driver markers ── */
   useEffect(() => {
     if (!ready) return;
-    const L = (window as any).L;
+    const L = window.L;
     const map = instanceRef.current;
     markersRef.current.forEach((m) => map.removeLayer(m));
     markersRef.current = [];

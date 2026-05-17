@@ -3,12 +3,16 @@
 export type UserRole = 'admin' | 'worker' | 'client';
 
 export interface AuthUser {
-  id: string;
-  email?: string;
-  phone?: string;
-  full_name: string;
-  role: UserRole;
-  profile_photo_url?: string;
+ id: string;
+ email?: string;
+ phone?: string;
+ full_name: string;
+ role: UserRole;
+ profile_photo_url?: string;
+ driver_id?: string;
+ rating?: number;
+ total_trips?: number;
+ coords?: { lat: number; lng: number };
 }
 
 // ─── Driver / Worker ──────────────────────────────────────────────────────────

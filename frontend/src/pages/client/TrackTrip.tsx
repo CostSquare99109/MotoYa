@@ -142,7 +142,7 @@ export default function TrackTrip() {
     }
   };
 
-  const currentStepIdx = STATUS_STEPS.indexOf(status as any);
+  const currentStepIdx = STATUS_STEPS.indexOf(status as typeof STATUS_STEPS[number]);
 
   return (
     <div className="h-screen flex flex-col overflow-hidden bg-[#f8fafc]">

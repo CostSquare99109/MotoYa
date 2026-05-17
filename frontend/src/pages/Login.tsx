@@ -1,51 +1,38 @@
-import { useState } from "react";
-import { useNavigate } from "react-router";
-import { Bike, Eye, EyeOff, Loader2, MapPin } from "lucide-react";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
-import { useStore } from "@/hooks/useStore";
+import { useState } from 'react';
+import { useNavigate } from 'react-router';
+import { Bike, Loader2, MapPin } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { useStore } from '@/hooks/useStore';
+import { authFetch, PasswordField, ErrorAlert, AuthForm } from '@/components/auth/AuthComponents';
 
-const API = import.meta.env.VITE_API_URL ?? "";
+const API = import.meta.env.VITE_API_URL ?? '';
 
 export default function LoginPage() {
   const navigate = useNavigate();
   const { setToken, setUser } = useStore();
 
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
+  const [error, setError] = useState('');
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError("");
+    setError('');
     setLoading(true);
 
     try {
-      // OAuth2PasswordRequestForm expects form-encoded body
       const body = new URLSearchParams();
-      body.append("username", email);
-      body.append("password", password);
+      body.append('username', email);
+      body.append('password', password);
 
-      const res = await fetch(`${API}/api/auth/login`, {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: body.toString(),
-      });
-
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.detail || "Credenciales incorrectas");
-      }
-
-      const data = await res.json();
+      const data = await authFetch(`${API}/api/auth/login`, body);
       setToken(data.access_token);
       setUser(data.user);
-      navigate("/");
+      navigate('/');
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Error al iniciar sesión");
+      setError(err instanceof Error ? err.message : 'Error al iniciar sesión');
     } finally {
       setLoading(false);
     }
@@ -54,7 +41,6 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen bg-[#f8fafc] flex items-center justify-center p-4">
       <div className="w-full max-w-md">
-        {/* Card */}
         <div className="bg-white rounded-2xl shadow-lg border border-slate-100 overflow-hidden">
           {/* Header */}
           <div className="bg-[#0f172a] px-8 py-8 text-center">
@@ -74,15 +60,21 @@ export default function LoginPage() {
             <h2 className="text-lg font-semibold text-slate-800 mb-1">Iniciar sesión</h2>
             <p className="text-sm text-slate-500 mb-6">Ingresa tus credenciales de administrador</p>
 
-            <form onSubmit={handleLogin} className="space-y-5">
+            <AuthForm
+              onSubmit={handleLogin}
+              loading={loading}
+              loadingText={<><Loader2 className="w-4 h-4 mr-2 animate-spin" />Ingresando...</>}
+              submitText="Ingresar"
+              variant="light"
+            >
               <div className="space-y-2">
                 <Label htmlFor="email">Correo electrónico</Label>
                 <Input
                   id="email"
                   type="email"
-                  placeholder="gmail"
+                  placeholder="admin@motoya.co"
                   value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  onChange={e => setEmail(e.target.value)}
                   required
                   autoComplete="email"
                   className="h-10"
@@ -91,48 +83,11 @@ export default function LoginPage() {
 
               <div className="space-y-2">
                 <Label htmlFor="password">Contraseña</Label>
-                <div className="relative">
-                  <Input
-                    id="password"
-                    type={showPassword ? "text" : "password"}
-                    placeholder="••••••••"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    required
-                    autoComplete="current-password"
-                    className="h-10 pr-10"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
-                  >
-                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
-                </div>
+                <PasswordField value={password} onChange={setPassword} variant="light" />
               </div>
 
-              {error && (
-                <div className="bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-lg">
-                  {error}
-                </div>
-              )}
-
-              <Button
-                type="submit"
-                disabled={loading}
-                className="w-full h-10 bg-[#f97316] hover:bg-[#ea580c] font-semibold"
-              >
-                {loading ? (
-                  <>
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    Ingresando...
-                  </>
-                ) : (
-                  "Ingresar"
-                )}
-              </Button>
-            </form>
+              <ErrorAlert message={error} variant="light" />
+            </AuthForm>
           </div>
         </div>
       </div>

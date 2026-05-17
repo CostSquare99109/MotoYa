@@ -74,7 +74,7 @@ export default function ClientHome() {
   const { user, token, logout } = useStore();
 
   // Coordenadas guardadas en el store desde el login (si el GPS funcionó)
-  const savedCoords = (user as any)?.coords as { lat: number; lng: number } | undefined;
+  const savedCoords = user?.coords as { lat: number; lng: number } | undefined;
 
   const [pickup,      setPickup]      = useState<[number, number] | null>(
     savedCoords ? [savedCoords.lat, savedCoords.lng] : null
