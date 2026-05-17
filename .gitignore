@@ -12,6 +12,9 @@ env/
 
 # Environment
 .env
+*.env
+.env.local
+.env.production
 
 # Uploads
 uploads/

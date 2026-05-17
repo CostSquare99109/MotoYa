@@ -58,12 +58,9 @@ La app queda disponible en `http://localhost:5173`
 
 ## Credenciales por defecto
 
-| Portal | Email | Contraseña |
-|--------|-------|------------|
-| **Admin** | `admin@motoya.co` | `admin123` |
-| **Despacho** | `despacho@motoya.co` | `despacho123` |
+Las credenciales iniciales están en `database/seed.sql`. Revísalas y cámbialas antes de desplegar.
 
-> ⚠️ **Cambia estas contraseñas en producción.**
+> ⚠️ **Nunca uses credenciales por defecto en producción.** Cambia `JWT_SECRET` en `.env` y las contraseñas de usuario en la base de datos.
 
 ## Estructura del proyecto
 
@@ -101,9 +98,8 @@ motoya/
 │   │   │   ├── worker.py      # Portal conductor
 │   │   │   └── client.py      # Portal pasajero
 │   │   └── schemas/           # Pydantic validation schemas
-│   ├── requirements.txt
-│   ├── .env.example
-│   └── .env
+│ ├── requirements.txt
+│ └── .env.example
 ├── frontend/
 │   ├── src/
 │   │   ├── pages/
@@ -161,9 +157,10 @@ Con el backend corriendo: `http://localhost:8000/docs` (Swagger UI)
 
 | Variable | Descripción | Default |
 |----------|-------------|---------|
-| `DATABASE_URL` | Conexión PostgreSQL async | `postgresql+asyncpg://motoya_user:motoya2024@localhost:5432/motoya` |
+| `APP_ENV` | Entorno de ejecución | `development` |
+| `DATABASE_URL` | Conexión PostgreSQL async | `postgresql+asyncpg://motoya_user:<TU_PASSWORD>@localhost:5432/motoya` |
 | `REDIS_URL` | Conexión Redis | `redis://localhost:6379/0` |
-| `JWT_SECRET` | Clave secreta para tokens | `change-me-in-production` |
+| `JWT_SECRET` | Clave secreta para tokens | **Obligatorio cambiar en producción** |
 | `JWT_ALGORITHM` | Algoritmo JWT | `HS256` |
 | `JWT_EXPIRATION_MINUTES` | Expiración del token | `1440` (24h) |
 | `CORS_ORIGINS` | Orígenes permitidos | `http://localhost:3000,http://localhost:5173` |

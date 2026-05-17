@@ -7,7 +7,8 @@
 -- ═══════════════════════════════════════════════════════════════════════════════
 
 -- ── 1. Usuario Admin ─────────────────────────────────────────────────────────
--- Email: admin@motoya.co  |  Contraseña: admin123
+-- ⚠️ IMPORTANTE: Cambia estas contraseñas antes de desplegar en producción.
+-- Los hashes bcrypt corresponden a credenciales por defecto que DEBES rotar.
 INSERT INTO users (id, email, password_hash, full_name, phone, role, is_active, created_at, updated_at)
 VALUES (
   uuid_generate_v4(),
@@ -22,7 +23,8 @@ VALUES (
 ) ON CONFLICT (email) DO NOTHING;
 
 -- ── 2. Usuario Dispatcher ────────────────────────────────────────────────────
--- Email: despacho@motoya.co  |  Contraseña: despacho123
+-- Email: despacho@motoya.co | Contraseña: despacho123
+-- ⚠️ IMPORTANTE: Cambia esta contraseña antes de desplegar en producción.
 INSERT INTO users (id, email, password_hash, full_name, phone, role, is_active, created_at, updated_at)
 VALUES (
   uuid_generate_v4(),
@@ -71,15 +73,9 @@ VALUES (
 ) ON CONFLICT (key) DO NOTHING;
 
 -- ═══════════════════════════════════════════════════════════════════════════════
--- CREDENCIALES POR DEFECTO:
+-- CREDENCIALES POR DEFECTO (solo para desarrollo):
 --
---   Portal Admin:
---     Email:    admin@motoya.co
---     Password: admin123
---
---   Portal Despacho:
---     Email:    despacho@motoya.co
---     Password: despacho123
---
--- ⚠️  CAMBIA ESTAS CONTRASEÑAS EN PRODUCCIÓN
+-- ⚠️ CAMBIA ESTAS CONTRASEÑAS EN PRODUCCIÓN
+-- Los hashes bcrypt aquí corresponden a contraseñas débiles por defecto.
+-- Genera nuevos hashes con: python -c "import bcrypt; print(bcrypt.hashpw(b'TU_PASSWORD', bcrypt.gensalt()).decode())"
 -- ═══════════════════════════════════════════════════════════════════════════════

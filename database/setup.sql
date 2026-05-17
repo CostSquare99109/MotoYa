@@ -9,7 +9,7 @@
 DO $$
 BEGIN
   IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'motoya_user') THEN
-    CREATE ROLE motoya_user WITH LOGIN PASSWORD 'motoya2024';
+    CREATE ROLE motoya_user WITH LOGIN PASSWORD '<TU_PASSWORD_DB>';
   END IF;
 END
 $$;
