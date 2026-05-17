@@ -21,9 +21,8 @@ class NotificationSettings(BaseModel):
 
 
 class SecuritySettings(BaseModel):
-    openrouterKey: Optional[str] = None  # None = no cambiar
-    selfieValidation: bool = True
-    emergencyStream: bool = True
+ selfieValidation: bool = True
+ emergencyStream: bool = True
 
 
 class DispatchSettings(BaseModel):
