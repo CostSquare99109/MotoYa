@@ -149,9 +149,10 @@ motoya/
 | `WS` | `/ws/location/{driver_id}` | Tracking GPS en tiempo real |
 | `WS` | `/ws/emergency` | Stream de emergencias |
 
-## API Docs
+## Documentación
 
-Con el backend corriendo: `http://localhost:8000/docs` (Swagger UI)
+- **API Docs (Swagger UI)**: Con el backend corriendo → [http://localhost:8000/docs](http://localhost:8000/docs)
+- **Guía de despliegue**: Ver [DEPLOYMENT.md](DEPLOYMENT.md) para instrucciones de producción
 
 ## Variables de entorno (.env)
 
