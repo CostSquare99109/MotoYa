@@ -1,6 +1,10 @@
-"""Authentication router for JWT token management."""
+"""Authentication router for JWT token management.
 
-from datetime import datetime, timedelta, date
+This router handles ONLY authentication (verify credentials, return tokens).
+Driver creation and User-Driver linking is delegated to services/worker_sync.py.
+"""
+
+from datetime import datetime, timedelta
 from typing import Optional
 import uuid
 
@@ -8,7 +12,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from jose import JWTError, jwt
 from passlib.context import CryptContext
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -16,8 +20,16 @@ from sqlalchemy.exc import IntegrityError
 from app.database import get_db
 from app.models.users import User
 from app.models.drivers import Driver
-from app.models.rankings import Ranking
 from app.config import get_settings
+from app.schemas.validators import validate_phone, validate_name
+from app.services.worker_sync import (
+    get_driver_by_phone,
+    get_user_by_phone,
+    get_user_by_id,
+    link_driver_to_user,
+    ensure_driver_for_user,
+    build_worker_response,
+)
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -25,6 +37,8 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login", auto_error=False)
 settings = get_settings()
 
+
+# ── Helpers ──────────────────────────────────────────────────────────────────
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     return pwd_context.verify(plain_password, hashed_password)
@@ -41,6 +55,20 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
     )
     to_encode.update({"exp": expire})
     return jwt.encode(to_encode, settings.JWT_SECRET, algorithm=settings.JWT_ALGORITHM)
+
+
+def _authenticate_user(user: User, password: str) -> None:
+    """Verify password and active status. Raises HTTPException on failure."""
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Cuenta desactivada",
+        )
+    if not verify_password(password, user.password_hash):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Contraseña incorrecta",
+        )
 
 
 async def get_current_user(
@@ -119,96 +147,38 @@ async def worker_login(
 ):
     """
     Autenticación para conductores (workers).
-
     El campo 'username' es el teléfono del conductor.
 
-    Flujo:
-      1. Busca en la tabla drivers por teléfono  →  flujo completo con driver_id.
-      2. Si no hay Driver, busca en users por teléfono + role='worker'
-         (conductores creados desde el panel Usuarios antes de tener Driver).
-         En ese caso crea el registro Driver automáticamente para sincronizar.
+    Flujo simplificado:
+    1. Busca Driver por teléfono.
+       - Si tiene user_id → autentica el User vinculado.
+       - Si no tiene user_id → busca User por teléfono para vincularlo.
+    2. Si no hay Driver → busca User con role='worker'.
+       - Si existe → crea el Driver automáticamente (ensure_driver_for_user).
+    3. Si no hay nada → 404.
     """
     phone = form_data.username.strip()
 
-    # ── CASO 1: conductor con registro en drivers ────────────────────────────
-    driver_result = await db.execute(
-        select(Driver).where(Driver.phone == phone)
-    )
-    driver = driver_result.scalar_one_or_none()
+    # ── Paso 1: Buscar Driver por teléfono ──────────────────────────────────
+    driver = await get_driver_by_phone(db, phone)
 
     if driver:
-        if not driver.user_id:
-            link_result = await db.execute(
-                select(User).where(
-                    User.phone == phone,
-                    User.role == "worker",
-                )
-            )
-            link_user = link_result.scalar_one_or_none()
-            if link_user:
-                driver.user_id = link_user.id
-                await db.commit()
-                await db.refresh(driver)
-            else:
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail="Este conductor no tiene cuenta de acceso. Contacta al administrador.",
-                )
-
+        # Verificar estado del conductor
         if driver.status not in ("active", "pending"):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=f"Cuenta suspendida o inactiva (estado: {driver.status})",
             )
 
-        user_result = await db.execute(
-            select(User).where(User.id == driver.user_id)
-        )
-        user = user_result.scalar_one_or_none()
-
-        if not user:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Cuenta de usuario no encontrada. Contacta al administrador.",
-            )
-
-        if not user.is_active:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Cuenta desactivada",
-            )
-
-        if not verify_password(form_data.password, user.password_hash):
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Contraseña incorrecta",
-            )
+        # Asegurar que el Driver tiene un User vinculado
+        user = await link_driver_to_user(db, driver)
+        _authenticate_user(user, form_data.password)
 
         access_token = create_access_token({"sub": str(user.id)})
-        return {
-            "access_token": access_token,
-            "token_type": "bearer",
-            "user": {
-                "id":               str(user.id),
-                "driver_id":        str(driver.id),
-                "full_name":        driver.full_name,
-                "phone":            driver.phone,
-                "email":            driver.email or user.email,
-                "role":             "worker",
-                "rating":           float(driver.rating or 5.0),
-                "total_trips":      driver.total_trips or 0,
-                "profile_photo_url": driver.profile_photo_url,
-            },
-        }
+        return build_worker_response(user, driver, access_token)
 
-    # ── CASO 2: conductor creado desde Usuarios ──────────────────────────────
-    user_result = await db.execute(
-        select(User).where(
-            User.phone == phone,
-            User.role == "worker",
-        )
-    )
-    user = user_result.scalar_one_or_none()
+    # ── Paso 2: Buscar User con role=worker ─────────────────────────────────
+    user = await get_user_by_phone(db, phone, role="worker")
 
     if not user:
         raise HTTPException(
@@ -216,61 +186,13 @@ async def worker_login(
             detail="No existe un conductor con ese número de teléfono",
         )
 
-    if not user.is_active:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Cuenta desactivada",
-        )
+    _authenticate_user(user, form_data.password)
 
-    if not verify_password(form_data.password, user.password_hash):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Contraseña incorrecta",
-        )
-
-    uid_hex = uuid.uuid4().hex[:8]
-    new_driver = Driver(
-        user_id=user.id,
-        full_name=user.full_name,
-        phone=phone,
-        email=user.email,
-        document_id=f"PEND-{uid_hex}",
-        license_number=f"PEND-{uid_hex}",
-        license_expiry=date.today(),
-        status="active",
-        is_online=False,
-    )
-    db.add(new_driver)
-    try:
-        await db.flush()
-        db.add(Ranking(driver_id=new_driver.id))
-        await db.commit()
-        await db.refresh(new_driver)
-    except IntegrityError:
-        await db.rollback()
-        driver_retry = await db.execute(
-            select(Driver).where(Driver.user_id == user.id)
-        )
-        new_driver = driver_retry.scalar_one_or_none()
-        if not new_driver:
-            raise HTTPException(500, detail="Error al crear perfil de conductor")
+    # Crear el perfil de Driver si no existe
+    driver = await ensure_driver_for_user(db, user)
 
     access_token = create_access_token({"sub": str(user.id)})
-    return {
-        "access_token": access_token,
-        "token_type": "bearer",
-        "user": {
-            "id":               str(user.id),
-            "driver_id":        str(new_driver.id),
-            "full_name":        new_driver.full_name,
-            "phone":            phone,
-            "email":            user.email,
-            "role":             "worker",
-            "rating":           float(new_driver.rating or 5.0),
-            "total_trips":      new_driver.total_trips or 0,
-            "profile_photo_url": user.avatar_url,
-        },
-    }
+    return build_worker_response(user, driver, access_token)
 
 
 # ── GET /auth/me ──────────────────────────────────────────────────────────────
@@ -279,10 +201,10 @@ async def worker_login(
 async def me(current_user: User = Depends(get_current_user)):
     """Retorna la información del usuario actualmente autenticado."""
     return {
-        "id":         str(current_user.id),
-        "email":      current_user.email,
-        "full_name":  current_user.full_name,
-        "role":       current_user.role,
+        "id": str(current_user.id),
+        "email": current_user.email,
+        "full_name": current_user.full_name,
+        "role": current_user.role,
         "avatar_url": current_user.avatar_url,
     }
 
@@ -290,8 +212,11 @@ async def me(current_user: User = Depends(get_current_user)):
 # ── POST /auth/client/quick-login — login exprés para pasajeros ──────────────
 
 class ClientQuickLoginSchema(BaseModel):
-    full_name: str
-    phone: str
+    full_name: str = Field(..., min_length=2, max_length=100)
+    phone: str = Field(..., min_length=7, max_length=20)
+
+    _validate_name = field_validator('full_name')(validate_name)
+    _validate_phone = field_validator('phone')(validate_phone)
 
 
 @router.post("/client/quick-login")
@@ -304,13 +229,13 @@ async def client_quick_login(
     Solo requiere nombre y teléfono — sin OTP, sin contraseña.
 
     Flujo:
-      1. Busca User con phone == data.phone y role == 'client'.
-      2. Si existe → actualiza nombre si cambió → devuelve token.
-      3. Si no existe → crea User con role='client' y contraseña aleatoria
-         (el cliente nunca la usa) → devuelve token.
+    1. Busca User con phone == data.phone y role == 'client'.
+    2. Si existe → actualiza nombre si cambió → devuelve token.
+    3. Si no existe → crea User con role='client' y contraseña aleatoria
+       (el cliente nunca la usa) → devuelve token.
     """
     phone = data.phone.strip()
-    name  = data.full_name.strip()
+    name = data.full_name.strip()
 
     # ── 1. Buscar usuario existente ──────────────────────────────────────────
     result = await db.execute(
@@ -329,12 +254,12 @@ async def client_quick_login(
         random_pwd = get_password_hash(uuid.uuid4().hex)
 
         user = User(
-            email         = fake_email,
-            password_hash = random_pwd,
-            full_name     = name,
-            phone         = phone,
-            role          = "client",
-            is_active     = True,
+            email=fake_email,
+            password_hash=random_pwd,
+            full_name=name,
+            phone=phone,
+            role="client",
+            is_active=True,
         )
         db.add(user)
         try:
@@ -353,11 +278,11 @@ async def client_quick_login(
     access_token = create_access_token({"sub": str(user.id)})
     return {
         "access_token": access_token,
-        "token_type":   "bearer",
+        "token_type": "bearer",
         "user": {
-            "id":        str(user.id),
+            "id": str(user.id),
             "full_name": user.full_name,
-            "phone":     user.phone,
-            "role":      "client",
+            "phone": user.phone,
+            "role": "client",
         },
     }
