@@ -4,7 +4,7 @@ import pytest
 from pydantic import ValidationError
 
 from app.schemas.validators import validate_phone, validate_name
-from app.schemas.client import ClientRegisterSchema, ClientLoginSchema, ClientQuickLoginSchema
+from app.schemas.client import ClientRegisterSchema, ClientLoginSchema
 
 
 # ── validate_phone ────────────────────────────────────────────────────────────
@@ -32,7 +32,7 @@ class TestValidatePhone:
             validate_phone("+1234567890123456")
 
     def test_strips_whitespace(self):
-        assert validate_phone("  +573001234567  ") == "+573001234567"
+        assert validate_phone(" +573001234567 ") == "+573001234567"
 
 
 # ── validate_name ─────────────────────────────────────────────────────────────
@@ -56,7 +56,7 @@ class TestValidateName:
             validate_name("Jhon<script>")
 
     def test_strips_whitespace(self):
-        assert validate_name("  Jhon  ") == "Jhon"
+        assert validate_name(" Jhon ") == "Jhon"
 
 
 # ── ClientRegisterSchema ─────────────────────────────────────────────────────
@@ -67,7 +67,7 @@ class TestClientRegisterSchema:
             "full_name": "María García",
             "phone": "+573001234567",
             "email": "maria@test.com",
-            "password": "secret123",
+            "password": "secretpass",
         }
         schema = ClientRegisterSchema(**data)
         assert schema.full_name == "María García"
@@ -77,7 +77,7 @@ class TestClientRegisterSchema:
         data = {
             "full_name": "Test User",
             "phone": "not-a-phone",
-            "password": "secret123",
+            "password": "secretpass",
         }
         with pytest.raises(ValidationError):
             ClientRegisterSchema(**data)
@@ -86,7 +86,7 @@ class TestClientRegisterSchema:
         data = {
             "full_name": "User123<script>",
             "phone": "+573001234567",
-            "password": "secret123",
+            "password": "secretpass",
         }
         with pytest.raises(ValidationError):
             ClientRegisterSchema(**data)
@@ -117,12 +117,6 @@ class TestClientLoginSchema:
 
 class TestConfigSecurity:
     def test_development_allows_default_jwt(self):
-        """In development mode, default JWT_SECRET should be allowed."""
-        import os
-        os.environ["APP_ENV"] = "development"
-        os.environ["DATABASE_URL"] = "postgresql+asyncpg://test:test@localhost/test"
-        os.environ["JWT_SECRET"] = "change-me-in-production"
-        # Should not raise
         from app.config import Settings
         s = Settings(
             APP_ENV="development",
@@ -132,7 +126,6 @@ class TestConfigSecurity:
         assert s.JWT_SECRET == "change-me-in-production"
 
     def test_production_rejects_default_jwt(self):
-        """In production mode, default JWT_SECRET should be rejected."""
         from app.config import Settings
         with pytest.raises(ValueError, match="JWT_SECRET must be changed"):
             Settings(
@@ -142,7 +135,6 @@ class TestConfigSecurity:
             )
 
     def test_staging_rejects_default_jwt(self):
-        """In staging mode, default JWT_SECRET should also be rejected."""
         from app.config import Settings
         with pytest.raises(ValueError, match="JWT_SECRET must be changed"):
             Settings(
@@ -152,11 +144,10 @@ class TestConfigSecurity:
             )
 
     def test_production_rejects_localhost_db(self):
-        """In production, DATABASE_URL should not point to localhost."""
         from app.config import Settings
         with pytest.raises(ValueError, match="localhost"):
             Settings(
                 APP_ENV="production",
                 DATABASE_URL="postgresql+asyncpg://user:pass@localhost/motoya",
-                JWT_SECRET="a-real-secret-key-here",
+                JWT_SECRET="a-real-long-random-secret-here-for-production",
             )
