@@ -167,4 +167,4 @@ Con el backend corriendo: `http://localhost:8000/docs` (Swagger UI)
 
 ## Licencia
 
-Privado — todos los derechos reservados.
+MIT — ver [LICENSE](LICENSE). Código abierto, uso libre.
