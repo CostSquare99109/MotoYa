@@ -1,11 +1,15 @@
 """Application configuration and environment variables."""
 
+import os
 from pydantic_settings import BaseSettings
 from functools import lru_cache
 
 
 class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
+
+    # Environment
+    APP_ENV: str = "development"  # development | staging | production
 
     # Database
     DATABASE_URL: str
@@ -19,12 +23,32 @@ class Settings(BaseSettings):
     JWT_EXPIRATION_MINUTES: int = 1440
 
     # CORS
-    CORS_ORIGINS: str = "*"
+    CORS_ORIGINS: str = "http://localhost:3000,http://localhost:5173"
 
     # File uploads
     UPLOAD_DIR: str = "uploads"
-    MAX_UPLOAD_SIZE: int = 10 * 1024 * 1024
+    MAX_UPLOAD_SIZE: int = 10_485_760  # 10 MB
     ALLOWED_UPLOAD_TYPES: str = "image/jpeg,image/png,image/webp,application/pdf"
+
+    # ── Validación de seguridad ─────────────────────────────────────────────
+    def model_post_init(self, __context) -> None:
+        """Validate that production settings are secure."""
+        if self.APP_ENV in ("production", "staging"):
+            if self.JWT_SECRET == "change-me-in-production":
+                raise ValueError(
+                    "JWT_SECRET must be changed from default in "
+                    f"{self.APP_ENV} environment. "
+                    "Set a strong secret in your .env file."
+                )
+            if "localhost" in self.DATABASE_URL:
+                raise ValueError(
+                    f"DATABASE_URL points to localhost in {self.APP_ENV} environment. "
+                    "Configure a proper database host."
+                )
+
+    @property
+    def is_development(self) -> bool:
+        return self.APP_ENV == "development"
 
     @property
     def cors_origins_list(self) -> list[str]:
