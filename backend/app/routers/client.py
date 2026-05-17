@@ -1,19 +1,24 @@
 """Router para el rol Client (pasajero / solicitante de servicio).
 
-Usa el modelo Client (tabla clients), distinto del modelo User (backoffice).
+Usa el modelo User con role='client' — unificado con el resto del sistema.
+Ya no existe una tabla 'clients' separada.
 """
 
 from datetime import datetime, timedelta
 from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException
+import uuid
+
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, func
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
 from app.database import get_db
-from app.models.clients import Client
+from app.models.users import User
 from app.models.drivers import Driver
 from app.models.driver_location import DriverLocation
 from app.models.trips import Trip, TripStatusHistory
@@ -27,12 +32,14 @@ from app.schemas.client import (
     ClientTripStatusSchema,
     TripRatingSchema,
 )
+from app.schemas.validators import validate_phone, validate_name
 from geoalchemy2.functions import ST_MakePoint, ST_SetSRID
 
 router = APIRouter(prefix="/client", tags=["client"])
 settings = get_settings()
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 client_oauth2 = OAuth2PasswordBearer(tokenUrl="/api/client/login", auto_error=False)
+limiter = Limiter(key_func=get_remote_address)
 
 
 # ── Auth helpers del cliente ──────────────────────────────────────────────────
@@ -45,10 +52,10 @@ def _verify_password(plain: str, hashed: str) -> bool:
     return pwd_context.verify(plain, hashed)
 
 
-def _create_client_token(client_id: str) -> str:
+def _create_client_token(user_id: str) -> str:
     expire = datetime.utcnow() + timedelta(minutes=settings.JWT_EXPIRATION_MINUTES)
     return jwt.encode(
-        {"sub": client_id, "type": "client", "exp": expire},
+        {"sub": user_id, "role": "client", "exp": expire},
         settings.JWT_SECRET,
         algorithm=settings.JWT_ALGORITHM,
     )
@@ -57,34 +64,52 @@ def _create_client_token(client_id: str) -> str:
 async def get_current_client(
     token: str = Depends(client_oauth2),
     db: AsyncSession = Depends(get_db),
-) -> Client:
+) -> User:
+    """Obtiene el User cliente actual a partir del token JWT."""
     if not token:
         raise HTTPException(status_code=401, detail="No autenticado")
     try:
         payload = jwt.decode(token, settings.JWT_SECRET, algorithms=[settings.JWT_ALGORITHM])
-        if payload.get("type") != "client":
+        if payload.get("role") != "client":
             raise HTTPException(status_code=401, detail="Token inválido para cliente")
-        client_id = payload.get("sub")
+        user_id = payload.get("sub")
     except JWTError:
         raise HTTPException(status_code=401, detail="Token inválido")
 
-    result = await db.execute(select(Client).where(Client.id == client_id))
-    client = result.scalar_one_or_none()
-    if not client or not client.is_active:
+    result = await db.execute(select(User).where(User.id == user_id, User.role == "client"))
+    user = result.scalar_one_or_none()
+    if not user or not user.is_active:
         raise HTTPException(status_code=401, detail="Cliente no encontrado")
-    return client
+    return user
+
+
+def _user_to_profile(user: User) -> dict:
+    """Convert a User with role='client' to a client profile dict."""
+    return {
+        "id": str(user.id),
+        "full_name": user.full_name,
+        "phone": user.phone,
+        "email": user.email,
+        "rating": float(user.rating or 5.0),
+        "total_trips": user.total_trips or 0,
+        "wallet_balance": float(user.wallet_balance or 0),
+        "is_verified": user.is_verified or False,
+        "avatar_url": user.avatar_url,
+    }
 
 
 # ── POST /client/register ─────────────────────────────────────────────────────
 
 @router.post("/register", response_model=ClientAuthResponseSchema)
+@limiter.limit("5/minute")
 async def register_client(
+    request: Request,
     payload: ClientRegisterSchema,
     db: AsyncSession = Depends(get_db),
 ):
-    # Verificar teléfono único
+    # Verificar teléfono único entre clientes
     result = await db.execute(
-        select(Client).where(Client.phone == payload.phone)
+        select(User).where(User.phone == payload.phone, User.role == "client")
     )
     if result.scalar_one_or_none():
         raise HTTPException(status_code=400, detail="El teléfono ya está registrado")
@@ -92,58 +117,57 @@ async def register_client(
     # Verificar email único si se proveyó
     if payload.email:
         result = await db.execute(
-            select(Client).where(Client.email == payload.email)
+            select(User).where(User.email == payload.email)
         )
         if result.scalar_one_or_none():
             raise HTTPException(status_code=400, detail="El correo ya está registrado")
 
-    client = Client(
+    # Generar email si no se proveyó
+    client_email = payload.email or f"{payload.phone.replace('+', '')}@motoya.client"
+
+    user = User(
         full_name=payload.full_name,
         phone=payload.phone,
-        email=payload.email,
+        email=client_email,
         password_hash=_hash_password(payload.password),
+        role="client",
+        is_active=True,
     )
-    db.add(client)
+    db.add(user)
     await db.commit()
-    await db.refresh(client)
+    await db.refresh(user)
 
-    token = _create_client_token(str(client.id))
+    token = _create_client_token(str(user.id))
     return ClientAuthResponseSchema(
         access_token=token,
-        client=ClientProfileSchema.from_orm(client),
+        client=ClientProfileSchema(**_user_to_profile(user)),
     )
 
 
 # ── POST /client/login ────────────────────────────────────────────────────────
 
 @router.post("/login")
+@limiter.limit("5/minute")
 async def login_client(
+    request: Request,
     payload: ClientLoginSchema,
     db: AsyncSession = Depends(get_db),
 ):
     result = await db.execute(
-        select(Client).where(Client.phone == payload.phone)
+        select(User).where(User.phone == payload.phone, User.role == "client")
     )
-    client = result.scalar_one_or_none()
+    user = result.scalar_one_or_none()
 
-    if not client or not _verify_password(payload.password, client.password_hash):
+    if not user or not _verify_password(payload.password, user.password_hash):
         raise HTTPException(status_code=401, detail="Teléfono o contraseña incorrectos")
-    if not client.is_active:
+    if not user.is_active:
         raise HTTPException(status_code=403, detail="Cuenta desactivada")
 
-    token = _create_client_token(str(client.id))
+    token = _create_client_token(str(user.id))
     return {
         "access_token": token,
         "token_type": "bearer",
-        "client": {
-            "id": str(client.id),
-            "full_name": client.full_name,
-            "phone": client.phone,
-            "email": client.email,
-            "rating": float(client.rating or 5.0),
-            "total_trips": client.total_trips,
-            "wallet_balance": float(client.wallet_balance or 0),
-        },
+        "client": _user_to_profile(user),
     }
 
 
@@ -151,9 +175,9 @@ async def login_client(
 
 @router.get("/me", response_model=ClientProfileSchema)
 async def get_client_profile(
-    client: Client = Depends(get_current_client),
+    client: User = Depends(get_current_client),
 ):
-    return ClientProfileSchema.from_orm(client)
+    return ClientProfileSchema(**_user_to_profile(client))
 
 
 # ── POST /client/trip/request — solicitar viaje ───────────────────────────────
@@ -161,7 +185,7 @@ async def get_client_profile(
 @router.post("/trip/request")
 async def request_trip(
     payload: TripRequestSchema,
-    client: Client = Depends(get_current_client),
+    client: User = Depends(get_current_client),
     db: AsyncSession = Depends(get_db),
 ):
     # Verificar que no tenga un viaje activo
@@ -231,14 +255,12 @@ async def request_trip(
     db.add(trip)
 
     if driver_id:
-        # Asignar si hay conductor disponible
         trip.driver_id = driver_id
         history = TripStatusHistory(
             trip_id=trip.id,
             status="pending",
         )
         db.add(history)
-        # Marcar conductor como ocupado
         nearest_location.trip_id = trip.id
 
     await db.commit()
@@ -252,7 +274,7 @@ async def request_trip(
         "driver_assigned": driver_id is not None,
         "estimated_arrival_min": 5 if driver_id else None,
         "message": "Viaje solicitado. Un conductor será asignado pronto." if not driver_id
-                   else "¡Conductor encontrado! Está en camino.",
+        else "¡Conductor encontrado! Está en camino.",
     }
 
 
@@ -261,7 +283,7 @@ async def request_trip(
 @router.get("/trip/{trip_id}", response_model=ClientTripStatusSchema)
 async def get_trip_status(
     trip_id: str,
-    client: Client = Depends(get_current_client),
+    client: User = Depends(get_current_client),
     db: AsyncSession = Depends(get_db),
 ):
     result = await db.execute(select(Trip).where(Trip.id == trip_id))
@@ -314,7 +336,7 @@ async def get_trip_status(
 async def get_client_trips(
     limit: int = 20,
     offset: int = 0,
-    client: Client = Depends(get_current_client),
+    client: User = Depends(get_current_client),
     db: AsyncSession = Depends(get_db),
 ):
     result = await db.execute(
@@ -347,7 +369,7 @@ async def get_client_trips(
 @router.post("/trip/{trip_id}/cancel")
 async def cancel_trip(
     trip_id: str,
-    client: Client = Depends(get_current_client),
+    client: User = Depends(get_current_client),
     db: AsyncSession = Depends(get_db),
 ):
     result = await db.execute(select(Trip).where(Trip.id == trip_id))
@@ -377,7 +399,7 @@ async def cancel_trip(
 async def rate_trip(
     trip_id: str,
     payload: TripRatingSchema,
-    client: Client = Depends(get_current_client),
+    client: User = Depends(get_current_client),
     db: AsyncSession = Depends(get_db),
 ):
     result = await db.execute(select(Trip).where(Trip.id == trip_id))
