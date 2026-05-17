@@ -1,6 +1,5 @@
 """Pydantic schemas for platform settings."""
 
-from typing import Optional
 from pydantic import BaseModel
 
 
@@ -21,8 +20,8 @@ class NotificationSettings(BaseModel):
 
 
 class SecuritySettings(BaseModel):
- selfieValidation: bool = True
- emergencyStream: bool = True
+    selfieValidation: bool = True
+    emergencyStream: bool = True
 
 
 class DispatchSettings(BaseModel):
@@ -42,5 +41,5 @@ class PlatformSettingsIn(BaseModel):
 class PlatformSettingsOut(BaseModel):
     general: dict
     notifications: dict
-    security: dict  # openrouterKey omitido en la respuesta
+    security: dict
     dispatch: dict

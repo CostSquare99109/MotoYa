@@ -27,7 +27,6 @@ DEFAULT_NOTIFICATIONS = {
     "dailyReports": False,
 }
 DEFAULT_SECURITY = {
-    "openrouterKey": "",
     "selfieValidation": True,
     "emergencyStream": True,
 }
@@ -66,16 +65,10 @@ async def get_settings(
 ):
     """Devuelve la configuración actual de la plataforma."""
     row = await _get_or_create(db)
-    # No exponer la API key completa — devolver placeholder si existe
-    security_out = {**row.security}
-    if security_out.get("openrouterKey"):
-        security_out["openrouterKey"] = "***guardada***"
-    else:
-        security_out["openrouterKey"] = ""
     return PlatformSettingsOut(
         general=row.general,
         notifications=row.notifications,
-        security=security_out,
+        security=row.security,
         dispatch=row.dispatch,
     )
 
@@ -95,12 +88,8 @@ async def update_settings(
     # Notificaciones
     row.notifications = payload.notifications.model_dump()
 
-    # Seguridad — solo actualizar openrouterKey si se envió un valor nuevo
-    new_security = payload.security.model_dump()
-    if not new_security.get("openrouterKey"):
-        # Mantener la key guardada, no pisar con cadena vacía
-        new_security["openrouterKey"] = row.security.get("openrouterKey", "")
-    row.security = new_security
+    # Seguridad
+    row.security = payload.security.model_dump()
 
     # Despacho
     row.dispatch = payload.dispatch.model_dump()
@@ -117,13 +106,9 @@ async def update_settings(
     await db.commit()
     await db.refresh(row)
 
-    security_out = {**row.security}
-    if security_out.get("openrouterKey"):
-        security_out["openrouterKey"] = "***guardada***"
-
     return PlatformSettingsOut(
         general=row.general,
         notifications=row.notifications,
-        security=security_out,
+        security=row.security,
         dispatch=row.dispatch,
     )

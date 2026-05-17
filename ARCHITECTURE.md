@@ -117,4 +117,4 @@ Trip (trips)                    Shipment (shipments)
 2. **PostGIS** — Las ubicaciones GPS se almacenan como Geography points para queries espaciales eficientes (conductores cercanos, distancia de viaje)
 3. **Login exprés para pasajeros** — Sin contraseña para reducir fricción; el teléfono es el identificador
 4. **Sincronización User-Driver en login** — Los conductores pueden crearse desde el admin panel antes de tener cuenta de acceso
-5. **Sin IA/chat** — El sistema se enfoca 100% en gestión de flota; no hay dependencias de modelos de IA
+5. **Gestión de flota pura** — El sistema se enfoca 100% en operación de mototaxis; sin dependencias externas innecesarias
