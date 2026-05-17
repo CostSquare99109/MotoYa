@@ -2,13 +2,14 @@
 
 This router handles ONLY authentication (verify credentials, return tokens).
 Driver creation and User-Driver linking is delegated to services/worker_sync.py.
+Rate limiting is applied to all auth endpoints to prevent brute-force attacks.
 """
 
 from datetime import datetime, timedelta
 from typing import Optional
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from jose import JWTError, jwt
 from passlib.context import CryptContext
@@ -16,6 +17,8 @@ from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
 from app.database import get_db
 from app.models.users import User
@@ -36,6 +39,38 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login", auto_error=False)
 settings = get_settings()
+limiter = Limiter(key_func=get_remote_address)
+
+# ── Failed login tracking (in-memory, per-process) ───────────────────────────
+# For production, replace with Redis-backed store.
+_login_attempts: dict[str, list[datetime]] = {}
+MAX_FAILED_ATTEMPTS = 5
+LOCKOUT_MINUTES = 15
+
+
+def _check_lockout(key: str) -> None:
+    """Raise 429 if the key has exceeded MAX_FAILED_ATTEMPTS in LOCKOUT_MINUTES."""
+    attempts = _login_attempts.get(key, [])
+    cutoff = datetime.utcnow() - timedelta(minutes=LOCKOUT_MINUTES)
+    attempts = [t for t in attempts if t > cutoff]
+    _login_attempts[key] = attempts
+    if len(attempts) >= MAX_FAILED_ATTEMPTS:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=f"Demasiados intentos fallidos. Intenta de nuevo en {LOCKOUT_MINUTES} minutos.",
+        )
+
+
+def _record_failed_attempt(key: str) -> None:
+    """Record a failed login attempt for lockout tracking."""
+    if key not in _login_attempts:
+        _login_attempts[key] = []
+    _login_attempts[key].append(datetime.utcnow())
+
+
+def _clear_failed_attempts(key: str) -> None:
+    """Clear failed attempts after a successful login."""
+    _login_attempts.pop(key, None)
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
@@ -103,17 +138,23 @@ async def get_current_admin(user: User = Depends(get_current_user)) -> User:
 # ── POST /auth/login — login admin/dispatcher (por email) ────────────────────
 
 @router.post("/login")
+@limiter.limit("5/minute")
 async def login(
+    request: Request,
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: AsyncSession = Depends(get_db),
 ):
     """Autenticación para admin y dispatcher. El campo 'username' es el email."""
+    lockout_key = f"login:{form_data.username}"
+    _check_lockout(lockout_key)
+
     result = await db.execute(
         select(User).where(User.email == form_data.username)
     )
     user = result.scalar_one_or_none()
 
     if not user or not verify_password(form_data.password, user.password_hash):
+        _record_failed_attempt(lockout_key)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Credenciales incorrectas",
@@ -125,6 +166,7 @@ async def login(
             detail="Cuenta desactivada",
         )
 
+    _clear_failed_attempts(lockout_key)
     access_token = create_access_token({"sub": str(user.id)})
     return {
         "access_token": access_token,
@@ -141,39 +183,39 @@ async def login(
 # ── POST /auth/worker/login — login conductores (por teléfono) ────────────────
 
 @router.post("/worker/login")
+@limiter.limit("5/minute")
 async def worker_login(
+    request: Request,
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: AsyncSession = Depends(get_db),
 ):
     """
     Autenticación para conductores (workers).
     El campo 'username' es el teléfono del conductor.
-
-    Flujo simplificado:
-    1. Busca Driver por teléfono.
-       - Si tiene user_id → autentica el User vinculado.
-       - Si no tiene user_id → busca User por teléfono para vincularlo.
-    2. Si no hay Driver → busca User con role='worker'.
-       - Si existe → crea el Driver automáticamente (ensure_driver_for_user).
-    3. Si no hay nada → 404.
+    Rate limited to 5 attempts/minute per IP.
     """
     phone = form_data.username.strip()
+    lockout_key = f"worker:{phone}"
+    _check_lockout(lockout_key)
 
     # ── Paso 1: Buscar Driver por teléfono ──────────────────────────────────
     driver = await get_driver_by_phone(db, phone)
 
     if driver:
-        # Verificar estado del conductor
         if driver.status not in ("active", "pending"):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=f"Cuenta suspendida o inactiva (estado: {driver.status})",
             )
 
-        # Asegurar que el Driver tiene un User vinculado
         user = await link_driver_to_user(db, driver)
-        _authenticate_user(user, form_data.password)
+        try:
+            _authenticate_user(user, form_data.password)
+        except HTTPException:
+            _record_failed_attempt(lockout_key)
+            raise
 
+        _clear_failed_attempts(lockout_key)
         access_token = create_access_token({"sub": str(user.id)})
         return build_worker_response(user, driver, access_token)
 
@@ -186,11 +228,14 @@ async def worker_login(
             detail="No existe un conductor con ese número de teléfono",
         )
 
-    _authenticate_user(user, form_data.password)
+    try:
+        _authenticate_user(user, form_data.password)
+    except HTTPException:
+        _record_failed_attempt(lockout_key)
+        raise
 
-    # Crear el perfil de Driver si no existe
+    _clear_failed_attempts(lockout_key)
     driver = await ensure_driver_for_user(db, user)
-
     access_token = create_access_token({"sub": str(user.id)})
     return build_worker_response(user, driver, access_token)
 
@@ -220,19 +265,16 @@ class ClientQuickLoginSchema(BaseModel):
 
 
 @router.post("/client/quick-login")
+@limiter.limit("10/minute")
 async def client_quick_login(
+    request: Request,
     data: ClientQuickLoginSchema,
     db: AsyncSession = Depends(get_db),
 ):
     """
     Login / registro exprés para clientes (pasajeros).
     Solo requiere nombre y teléfono — sin OTP, sin contraseña.
-
-    Flujo:
-    1. Busca User con phone == data.phone y role == 'client'.
-    2. Si existe → actualiza nombre si cambió → devuelve token.
-    3. Si no existe → crea User con role='client' y contraseña aleatoria
-       (el cliente nunca la usa) → devuelve token.
+    Rate limited to 10 attempts/minute per IP.
     """
     phone = data.phone.strip()
     name = data.full_name.strip()

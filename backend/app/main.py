@@ -3,9 +3,13 @@
 import os
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import JSONResponse
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 
 from app.config import get_settings
 from app.database import engine, Base
@@ -28,6 +32,9 @@ from app.routers import users as users_router
 
 settings = get_settings()
 
+# ── Rate limiter ─────────────────────────────────────────────────────────────
+limiter = Limiter(key_func=get_remote_address, default_limits=["200/minute"])
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -43,6 +50,11 @@ app = FastAPI(
     version="2.0.0",
     lifespan=lifespan,
 )
+
+# ── Rate limit error handler ─────────────────────────────────────────────────
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
 
 app.add_middleware(
     CORSMiddleware,
@@ -72,13 +84,3 @@ app.include_router(users_router.router, prefix="/api", tags=["users"])
 uploads_dir = settings.UPLOAD_DIR
 os.makedirs(uploads_dir, exist_ok=True)
 app.mount("/uploads", StaticFiles(directory=uploads_dir), name="uploads")
-
-
-@app.get("/api/health")
-async def health_check():
-    return {"status": "healthy", "service": "MotoYa API", "version": "2.0.0"}
-
-
-@app.get("/")
-async def root():
-    return {"message": "MotoYa API v2.0.0", "docs": "/docs"}
