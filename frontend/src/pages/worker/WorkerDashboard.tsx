@@ -23,8 +23,8 @@ const DEFAULT_LAT  = parseFloat(import.meta.env.VITE_DEFAULT_LAT ?? '7.7622');
 const DEFAULT_LNG  = parseFloat(import.meta.env.VITE_DEFAULT_LNG ?? '-76.6569');
 const DEFAULT_CENTER: [number, number] = [DEFAULT_LAT, DEFAULT_LNG];
 
-const WS_BASE = (import.meta.env.VITE_WS_URL ?? 'ws://localhost:8000').replace(/\/$/, '');
-const API     = import.meta.env.VITE_API_URL ?? '';
+const WS_BASE = (import.meta.env.VITE_WS_URL ?? '').replace(/\/$/, '');
+import { API_BASE as API } from "@/lib/apiConfig";
 
 // ── Iconos ────────────────────────────────────────────────────────────────────
 const MOTO_ICON = divIcon({
@@ -77,8 +77,8 @@ export default function WorkerDashboard() {
     fetch(`${API}/api/workers/me/stats`, { headers: authH(token) })
       .then(r => r.ok ? r.json() : null)
       .then(d => { if (d) setStats(d); })
-      .catch(() => {})
-      .finally(() => setStatsLoading(false));
+ .catch((e) => console.error('[WorkerDashboard] Error fetching stats:', e))
+ .finally(() => setStatsLoading(false));
   }, [token]);
 
   // ── Fetch viaje activo al cargar ─────────────────────────────────────────
@@ -86,8 +86,8 @@ export default function WorkerDashboard() {
     if (!token || !driverId) return;
     fetch(`${API}/api/trips?status=assigned&driver_id_filter=${driverId}&limit=1`, { headers: authH(token) })
       .then(r => r.ok ? r.json() : [])
-      .then((trips: Trip[]) => { if (trips[0]) setActiveTrip(trips[0]); })
-      .catch(() => {});
+ .then((trips: Trip[]) => { if (trips[0]) setActiveTrip(trips[0]); })
+ .catch((e) => console.error('[WorkerDashboard] Error fetching active trip:', e));
   }, [token, driverId]);
 
   // ── WebSocket messages ───────────────────────────────────────────────────
@@ -99,8 +99,8 @@ export default function WorkerDashboard() {
         setPendingRequest(data.trip);
       }
       if (data.type === 'stats_update') setStats(data.stats);
-    } catch (_) {}
-  }, []);
+ } catch (e) { console.warn('[WorkerDashboard] WS parse error:', e); }
+ }, []);
 
   const { status: wsStatus, send } = useWebSocket({
     url: wsUrl, enabled: !!token && isOnline, onMessage: handleMessage,
@@ -152,8 +152,8 @@ export default function WorkerDashboard() {
       const res = await fetch(`${API}/api/trips/${tripId}`, {
         headers: authH(token),
       });
-      if (res.ok) setActiveTrip(await res.json());
-    } catch (_) {}
+ if (res.ok) setActiveTrip(await res.json());
+ } catch (e) { console.error('[WorkerDashboard] Error accepting trip:', e); }
   };
 
   // ── Rechazar solicitud ───────────────────────────────────────────────────

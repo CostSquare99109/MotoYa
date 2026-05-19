@@ -1,15 +1,15 @@
 """Pydantic schemas for finance endpoints."""
 
 from datetime import datetime
-from typing import Optional
 from uuid import UUID
+
 from pydantic import BaseModel, ConfigDict
 
 
 class EarningCreate(BaseModel):
     driver_id: UUID
-    trip_id: Optional[UUID] = None
-    shipment_id: Optional[UUID] = None
+    trip_id: UUID | None = None
+    shipment_id: UUID | None = None
     gross_amount: float
     commission_amount: float = 0
     fuel_cost: float = 0
@@ -20,8 +20,8 @@ class EarningResponse(BaseModel):
 
     id: UUID
     driver_id: UUID
-    trip_id: Optional[UUID] = None
-    shipment_id: Optional[UUID] = None
+    trip_id: UUID | None = None
+    shipment_id: UUID | None = None
     gross_amount: float
     commission_amount: float
     fuel_cost: float

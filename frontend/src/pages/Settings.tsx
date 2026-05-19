@@ -12,7 +12,7 @@ import {
  Loader2, CheckCircle2,
 } from "lucide-react";
 
-const API = import.meta.env.VITE_API_URL ?? "http://127.0.0.1:8000";
+import { API_BASE as API, getAuthToken } from "@/lib/apiConfig";
 
 const defaultSettings = {
   general: {

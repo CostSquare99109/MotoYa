@@ -8,24 +8,25 @@ Prefijos registrados:
   /api/workers  — alias plural (compatibilidad con el frontend)
 """
 
-from datetime import datetime, date, timedelta
+from datetime import UTC, date, datetime, timedelta
+
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, and_
 
 from app.database import get_db
-from app.models.users import User
 from app.models.drivers import Driver
-from app.models.trips import Trip, TripStatusHistory
 from app.models.finances import Earning
+from app.models.trips import Trip, TripStatusHistory
+from app.models.users import User
 from app.routers.auth import get_current_user
 from app.schemas.worker import (
+    ActiveTripSchema,
+    IncomingTripSchema,
     TripResponseSchema,
     TripStatusUpdateSchema,
     WorkerOnlineStatusSchema,
     WorkerStatsSchema,
-    ActiveTripSchema,
-    IncomingTripSchema,
 )
 
 router = APIRouter(prefix="/worker", tags=["worker"])
@@ -163,7 +164,7 @@ async def update_worker_status(
 ):
     driver = await get_driver_from_user(current_user, db)
     driver.is_online = payload.is_online
-    driver.last_seen = datetime.utcnow()
+    driver.last_seen = datetime.now(UTC)
     await db.commit()
     return {"is_online": driver.is_online, "message": "Estado actualizado"}
 
@@ -297,7 +298,7 @@ async def update_trip_status(
         trip.notes = payload.notes
     if payload.status == "completed":
         driver.total_trips += 1
-        trip.updated_at = datetime.utcnow()
+        trip.updated_at = datetime.now(UTC)
 
     db.add(TripStatusHistory(trip_id=trip.id, status=payload.status, changed_by=current_user.id))
     await db.commit()

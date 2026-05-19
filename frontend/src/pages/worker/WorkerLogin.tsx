@@ -4,7 +4,7 @@ import { useStore } from '@/hooks/useStore';
 import { Bike, Loader2, MapPin, Shield, Phone } from 'lucide-react';
 import { authFetch, PasswordField, ErrorAlert, AuthForm } from '@/components/auth/AuthComponents';
 
-const API = import.meta.env.VITE_API_URL ?? '';
+import { API_BASE as API } from "@/lib/apiConfig";
 const CITY_NAME = import.meta.env.VITE_CITY_NAME ?? 'Carepa, Antioquia';
 const CITY_LABEL = import.meta.env.VITE_CITY_LABEL ?? `${CITY_NAME} · Colombia`;
 

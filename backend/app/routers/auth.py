@@ -5,41 +5,49 @@ Driver creation and User-Driver linking is delegated to services/worker_sync.py.
 Rate limiting is applied to all auth endpoints to prevent brute-force attacks.
 """
 
-from datetime import datetime, timedelta
-from typing import Optional
 import uuid
+from datetime import UTC, datetime, timedelta
 
+import bcrypt as _bcrypt
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from jose import JWTError, jwt
-from passlib.context import CryptContext
 from pydantic import BaseModel, Field, field_validator
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
-from sqlalchemy.exc import IntegrityError
 from slowapi import Limiter
 from slowapi.util import get_remote_address
+from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import get_settings
 from app.database import get_db
 from app.models.users import User
-from app.models.drivers import Driver
-from app.config import get_settings
-from app.schemas.validators import validate_phone, validate_name
+from app.schemas.validators import validate_name, validate_phone
 from app.services.worker_sync import (
+    build_worker_response,
+    ensure_driver_for_user,
     get_driver_by_phone,
     get_user_by_phone,
-    get_user_by_id,
     link_driver_to_user,
-    ensure_driver_for_user,
-    build_worker_response,
 )
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login", auto_error=False)
 settings = get_settings()
 limiter = Limiter(key_func=get_remote_address)
+
+
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    return _bcrypt.checkpw(
+        plain_password.encode("utf-8"),
+        hashed_password.encode("utf-8") if isinstance(hashed_password, str) else hashed_password,
+    )
+
+
+def get_password_hash(password: str) -> str:
+    return _bcrypt.hashpw(password.encode("utf-8"), _bcrypt.gensalt(12)).decode("utf-8")
+
 
 # ── Failed login tracking (in-memory, per-process) ───────────────────────────
 # For production, replace with Redis-backed store.
@@ -51,7 +59,7 @@ LOCKOUT_MINUTES = 15
 def _check_lockout(key: str) -> None:
     """Raise 429 if the key has exceeded MAX_FAILED_ATTEMPTS in LOCKOUT_MINUTES."""
     attempts = _login_attempts.get(key, [])
-    cutoff = datetime.utcnow() - timedelta(minutes=LOCKOUT_MINUTES)
+    cutoff = datetime.now(UTC) - timedelta(minutes=LOCKOUT_MINUTES)
     attempts = [t for t in attempts if t > cutoff]
     _login_attempts[key] = attempts
     if len(attempts) >= MAX_FAILED_ATTEMPTS:
@@ -65,7 +73,7 @@ def _record_failed_attempt(key: str) -> None:
     """Record a failed login attempt for lockout tracking."""
     if key not in _login_attempts:
         _login_attempts[key] = []
-    _login_attempts[key].append(datetime.utcnow())
+    _login_attempts[key].append(datetime.now(UTC))
 
 
 def _clear_failed_attempts(key: str) -> None:
@@ -73,19 +81,9 @@ def _clear_failed_attempts(key: str) -> None:
     _login_attempts.pop(key, None)
 
 
-# ── Helpers ──────────────────────────────────────────────────────────────────
-
-def verify_password(plain_password: str, hashed_password: str) -> bool:
-    return pwd_context.verify(plain_password, hashed_password)
-
-
-def get_password_hash(password: str) -> str:
-    return pwd_context.hash(password)
-
-
-def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
+def create_access_token(data: dict, expires_delta: timedelta | None = None) -> str:
     to_encode = data.copy()
-    expire = datetime.utcnow() + (
+    expire = datetime.now(UTC) + (
         expires_delta or timedelta(minutes=settings.JWT_EXPIRATION_MINUTES)
     )
     to_encode.update({"exp": expire})
@@ -111,27 +109,27 @@ async def get_current_user(
     db: AsyncSession = Depends(get_db),
 ) -> User:
     if not token:
-        raise HTTPException(status_code=401, detail="Not authenticated")
+        raise HTTPException(status_code=401, detail="No autenticado")
     try:
         payload = jwt.decode(
             token, settings.JWT_SECRET, algorithms=[settings.JWT_ALGORITHM]
         )
         user_id = payload.get("sub")
         if not user_id:
-            raise HTTPException(status_code=401, detail="Invalid token")
+            raise HTTPException(status_code=401, detail="Token inválido")
     except JWTError:
-        raise HTTPException(status_code=401, detail="Invalid token")
+        raise HTTPException(status_code=401, detail="Token inválido")
 
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
     if not user or not user.is_active:
-        raise HTTPException(status_code=401, detail="User not found or inactive")
+        raise HTTPException(status_code=401, detail="Usuario no encontrado o inactivo")
     return user
 
 
 async def get_current_admin(user: User = Depends(get_current_user)) -> User:
     if user.role != "admin":
-        raise HTTPException(status_code=403, detail="Admin access required")
+        raise HTTPException(status_code=403, detail="Se requiere acceso de administrador")
     return user
 
 

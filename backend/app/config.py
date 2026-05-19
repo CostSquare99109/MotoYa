@@ -1,8 +1,8 @@
 """Application configuration and environment variables."""
 
-import os
-from pydantic_settings import BaseSettings
 from functools import lru_cache
+
+from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
@@ -20,10 +20,10 @@ class Settings(BaseSettings):
     # JWT
     JWT_SECRET: str = "change-me-in-production"
     JWT_ALGORITHM: str = "HS256"
-    JWT_EXPIRATION_MINUTES: int = 1440
+    JWT_EXPIRATION_MINUTES: int = 60  # 1 hora — en prod usar .env con valor menor (15-30 min)
 
     # CORS
-    CORS_ORIGINS: str = "http://localhost:3000,http://localhost:5173"
+    CORS_ORIGINS: str = ""  # Obligatorio via .env — separar multiples con coma
 
     # File uploads
     UPLOAD_DIR: str = "uploads"
@@ -65,6 +65,6 @@ class Settings(BaseSettings):
         env_file_encoding = "utf-8"
 
 
-@lru_cache()
+@lru_cache
 def get_settings() -> Settings:
     return Settings()

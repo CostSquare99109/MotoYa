@@ -42,11 +42,11 @@ function loadLeaflet(): Promise<void> {
 }
 
 function authHeaders(): HeadersInit {
-  const token = localStorage.getItem("token");
+  const token = getAuthToken();
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
-const API = import.meta.env.VITE_API_URL ?? "";
+import { API_BASE as API, getAuthToken } from "@/lib/apiConfig";
 
 /* ─── Component ─────────────────────────────────────────────────── */
 export default function MapPanel() {

@@ -1,20 +1,25 @@
 """Trip management router."""
 
 import uuid
-from typing import List, Optional
-from datetime import datetime, timedelta
+from datetime import UTC, datetime
+
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, and_
 from geoalchemy2 import WKTElement
+from pydantic import BaseModel
+from sqlalchemy import and_, func, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.models.trips import Trip, TripStatusHistory
 from app.models.drivers import Driver
-from app.schemas.trip import TripCreate, TripUpdate, TripResponse, TripStats
-from app.routers.auth import get_current_user
+from app.models.rankings import Ranking
+from app.models.trips import Trip, TripStatusHistory
 from app.models.users import User
+from app.routers.auth import get_current_user
+from app.schemas.trip import TripCreate, TripResponse, TripStats, TripUpdate
+
+# Comisión por defecto según tier del conductor
+_TIER_COMMISSION = {"bronze": 0.15, "silver": 0.12, "gold": 0.10, "platinum": 0.08}
+_DEFAULT_COMMISSION = 0.15
 
 router = APIRouter(prefix="/trips", tags=["trips"])
 
@@ -22,10 +27,10 @@ router = APIRouter(prefix="/trips", tags=["trips"])
 _BUSY_STATUSES = {"pending", "assigned", "in_progress", "en_route"}
 
 
-@router.get("", response_model=List[TripResponse])
+@router.get("", response_model=list[TripResponse])
 async def list_trips(
-    status: Optional[str] = Query(None),
-    driver_id: Optional[uuid.UUID] = None,
+    status: str | None = Query(None),
+    driver_id: uuid.UUID | None = None,
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
@@ -82,7 +87,7 @@ async def get_trip_stats(
     _: User = Depends(get_current_user)
 ):
     """Get trip statistics for dashboard."""
-    today = datetime.utcnow().date()
+    today = datetime.now(UTC).date()
     today_start = datetime(today.year, today.month, today.day)
 
     total = await db.execute(select(func.count(Trip.id)))
@@ -170,7 +175,7 @@ async def get_trip(
     result = await db.execute(select(Trip).where(Trip.id == trip_id))
     trip = result.scalar_one_or_none()
     if not trip:
-        raise HTTPException(status_code=404, detail="Trip not found")
+        raise HTTPException(status_code=404, detail="Viaje no encontrado")
     return trip
 
 
@@ -185,7 +190,7 @@ async def update_trip_status(
     result = await db.execute(select(Trip).where(Trip.id == trip_id))
     trip = result.scalar_one_or_none()
     if not trip:
-        raise HTTPException(status_code=404, detail="Trip not found")
+        raise HTTPException(status_code=404, detail="Viaje no encontrado")
 
     if data.status:
         trip.status = data.status
@@ -201,13 +206,23 @@ async def update_trip_status(
 
     if data.fare:
         trip.fare = data.fare
-        trip.commission = data.fare * 0.15
+        # Buscar tier del conductor para comisión correcta
+        if trip.driver_id:
+            rank_res = await db.execute(
+                select(Ranking).where(Ranking.driver_id == trip.driver_id)
+            )
+            rank = rank_res.scalar_one_or_none()
+            tier = rank.tier if rank else "bronze"
+            rate = _TIER_COMMISSION.get(tier, _DEFAULT_COMMISSION)
+        else:
+            rate = _DEFAULT_COMMISSION
+        trip.commission = data.fare * rate
 
     if data.rating:
         trip.rating = data.rating
 
     await db.commit()
-    return {"message": "Trip updated", "trip_id": str(trip_id), "status": trip.status}
+    return {"message": "Viaje actualizado", "trip_id": str(trip_id), "status": trip.status}
 
 
 # ── POST /trips/request — solicitud de viaje desde el cliente ────────────────
@@ -224,7 +239,7 @@ class ClientTripRequestSchema(BaseModel):
     dropoff_lng:     float
     dropoff_address: str
     payment_method:  str = "cash"
-    notes:           Optional[str] = None
+    notes:           str | None = None
 
 
 @router.post("/request", status_code=201)
@@ -273,7 +288,7 @@ async def request_trip(
         select(Driver, dist_col)
         .where(
             and_(
-                Driver.is_online == True,
+                Driver.is_online.is_(True),
                 Driver.status    == "active",
                 func.ST_DWithin(Driver.current_location, origin, 5_000),
             )

@@ -1,17 +1,17 @@
 """Motorcycle fleet management router."""
 
-from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_
-from pydantic import BaseModel
-from datetime import date
 import uuid
+from datetime import date
+
+from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel
+from sqlalchemy import and_, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.models.motorcycles import Motorcycle
-from app.routers.auth import get_current_user, get_current_admin
 from app.models.users import User
+from app.routers.auth import get_current_admin, get_current_user
 
 router = APIRouter(prefix="/motorcycles", tags=["motorcycles"])
 
@@ -23,39 +23,39 @@ class MotorcycleCreate(BaseModel):
     brand: str
     model: str
     year: int
-    color: Optional[str] = None
-    engine_cc: Optional[int] = None
-    mileage: Optional[int] = 0
-    driver_id: Optional[str] = None
+    color: str | None = None
+    engine_cc: int | None = None
+    mileage: int | None = 0
+    driver_id: uuid.UUID | None = None
 
 
 class MotorcycleUpdate(BaseModel):
-    brand: Optional[str] = None
-    model: Optional[str] = None
-    year: Optional[int] = None
-    color: Optional[str] = None
-    engine_cc: Optional[int] = None
-    status: Optional[str] = None
-    mileage: Optional[int] = None
-    last_maintenance: Optional[date] = None
-    next_maintenance: Optional[date] = None
-    driver_id: Optional[str] = None
+    brand: str | None = None
+    model: str | None = None
+    year: int | None = None
+    color: str | None = None
+    engine_cc: int | None = None
+    status: str | None = None
+    mileage: int | None = None
+    last_maintenance: date | None = None
+    next_maintenance: date | None = None
+    driver_id: uuid.UUID | None = None
 
 
 class MotorcycleResponse(BaseModel):
-    id: str
+    id: uuid.UUID
     plate: str
     brand: str
     model: str
     year: int
-    color: Optional[str] = None
-    engine_cc: Optional[int] = None
+    color: str | None = None
+    engine_cc: int | None = None
     status: str
     mileage: int
-    last_maintenance: Optional[date] = None
-    next_maintenance: Optional[date] = None
-    driver_id: Optional[str] = None
-    driver_name: Optional[str] = None
+    last_maintenance: date | None = None
+    next_maintenance: date | None = None
+    driver_id: uuid.UUID | None = None
+    driver_name: str | None = None
 
     class Config:
         from_attributes = True
@@ -63,10 +63,10 @@ class MotorcycleResponse(BaseModel):
 
 # ── Endpoints ──────────────────────────────────────────────────────────────
 
-@router.get("", response_model=List[MotorcycleResponse])
+@router.get("", response_model=list[MotorcycleResponse])
 async def list_motorcycles(
-    status: Optional[str] = Query(None),
-    search: Optional[str] = Query(None),
+    status: str | None = Query(None),
+    search: str | None = Query(None),
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=200),
     db: AsyncSession = Depends(get_db),
@@ -96,20 +96,20 @@ async def list_motorcycles(
     out = []
     for m in motos:
         item = MotorcycleResponse(
-            id=str(m.id),
-            plate=m.plate,
-            brand=m.brand,
-            model=m.model,
-            year=m.year,
-            color=m.color,
-            engine_cc=m.engine_cc,
+    id=m.id,
+    plate=m.plate,
+    brand=m.brand,
+    model=m.model,
+    year=m.year,
+    color=m.color,
+    engine_cc=m.engine_cc,
             status=m.status or "active",
             mileage=m.mileage or 0,
             last_maintenance=m.last_maintenance,
             next_maintenance=m.next_maintenance,
-            driver_id=str(m.driver_id) if m.driver_id else None,
-        )
-        out.append(item)
+driver_id=m.driver_id,
+    )
+    out.append(item)
     return out
 
 
@@ -135,7 +135,7 @@ async def create_motorcycle(
         color=data.color,
         engine_cc=data.engine_cc,
         mileage=data.mileage or 0,
-        driver_id=uuid.UUID(data.driver_id) if data.driver_id else None,
+        driver_id=data.driver_id,
         status="active",
     )
     db.add(moto)
@@ -143,22 +143,22 @@ async def create_motorcycle(
     await db.refresh(moto)
 
     return MotorcycleResponse(
-        id=str(moto.id),
-        plate=moto.plate,
-        brand=moto.brand,
-        model=moto.model,
-        year=moto.year,
-        color=moto.color,
-        engine_cc=moto.engine_cc,
-        status=moto.status or "active",
-        mileage=moto.mileage or 0,
-        driver_id=str(moto.driver_id) if moto.driver_id else None,
+    id=moto.id,
+    plate=moto.plate,
+    brand=moto.brand,
+    model=moto.model,
+    year=moto.year,
+    color=moto.color,
+    engine_cc=moto.engine_cc,
+    status=moto.status or "active",
+    mileage=moto.mileage or 0,
+    driver_id=moto.driver_id,
     )
 
 
 @router.get("/{motorcycle_id}", response_model=MotorcycleResponse)
 async def get_motorcycle(
-    motorcycle_id: str,
+    motorcycle_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
@@ -169,24 +169,24 @@ async def get_motorcycle(
     if not moto:
         raise HTTPException(status_code=404, detail="Motocicleta no encontrada")
     return MotorcycleResponse(
-        id=str(moto.id),
-        plate=moto.plate,
-        brand=moto.brand,
-        model=moto.model,
-        year=moto.year,
-        color=moto.color,
-        engine_cc=moto.engine_cc,
-        status=moto.status or "active",
-        mileage=moto.mileage or 0,
-        last_maintenance=moto.last_maintenance,
-        next_maintenance=moto.next_maintenance,
-        driver_id=str(moto.driver_id) if moto.driver_id else None,
+    id=moto.id,
+    plate=moto.plate,
+    brand=moto.brand,
+    model=moto.model,
+    year=moto.year,
+    color=moto.color,
+    engine_cc=moto.engine_cc,
+    status=moto.status or "active",
+    mileage=moto.mileage or 0,
+    last_maintenance=moto.last_maintenance,
+    next_maintenance=moto.next_maintenance,
+    driver_id=moto.driver_id,
     )
 
 
 @router.patch("/{motorcycle_id}", response_model=MotorcycleResponse)
 async def update_motorcycle(
-    motorcycle_id: str,
+    motorcycle_id: uuid.UUID,
     data: MotorcycleUpdate,
     db: AsyncSession = Depends(get_db),
     _: User = Depends(get_current_admin),

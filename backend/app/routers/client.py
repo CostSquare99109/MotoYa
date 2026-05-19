@@ -4,56 +4,47 @@ Usa el modelo User con role='client' — unificado con el resto del sistema.
 Ya no existe una tabla 'clients' separada.
 """
 
-from datetime import datetime, timedelta
-from typing import Optional
-import uuid
+from datetime import UTC, datetime, timedelta
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.security import OAuth2PasswordBearer
+from geoalchemy2.functions import ST_MakePoint, ST_SetSRID
 from jose import JWTError, jwt
-from passlib.context import CryptContext
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_, func
 from slowapi import Limiter
 from slowapi.util import get_remote_address
+from sqlalchemy import and_, func, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.database import get_db
-from app.models.users import User
-from app.models.drivers import Driver
-from app.models.driver_location import DriverLocation
-from app.models.trips import Trip, TripStatusHistory
 from app.config import get_settings
+from app.database import get_db
+from app.models.driver_location import DriverLocation
+from app.models.drivers import Driver
+from app.models.trips import Trip, TripStatusHistory
+from app.models.users import User
+from app.routers.auth import get_password_hash, verify_password
 from app.schemas.client import (
-    ClientRegisterSchema,
-    ClientLoginSchema,
     ClientAuthResponseSchema,
+    ClientLoginSchema,
     ClientProfileSchema,
-    TripRequestSchema,
+    ClientRegisterSchema,
     ClientTripStatusSchema,
     TripRatingSchema,
+    TripRequestSchema,
 )
-from app.schemas.validators import validate_phone, validate_name
-from geoalchemy2.functions import ST_MakePoint, ST_SetSRID
 
 router = APIRouter(prefix="/client", tags=["client"])
 settings = get_settings()
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 client_oauth2 = OAuth2PasswordBearer(tokenUrl="/api/client/login", auto_error=False)
 limiter = Limiter(key_func=get_remote_address)
 
 
-# ── Auth helpers del cliente ──────────────────────────────────────────────────
-
-def _hash_password(password: str) -> str:
-    return pwd_context.hash(password)
-
-
-def _verify_password(plain: str, hashed: str) -> bool:
-    return pwd_context.verify(plain, hashed)
+# ── Auth helpers (reutilizados de auth.py) ───────────────────────────────────────
+# _hash_password → get_password_hash (auth.py)
+# _verify_password → verify_password (auth.py)
 
 
 def _create_client_token(user_id: str) -> str:
-    expire = datetime.utcnow() + timedelta(minutes=settings.JWT_EXPIRATION_MINUTES)
+    expire = datetime.now(UTC) + timedelta(minutes=settings.JWT_EXPIRATION_MINUTES)
     return jwt.encode(
         {"sub": user_id, "role": "client", "exp": expire},
         settings.JWT_SECRET,
@@ -129,7 +120,7 @@ async def register_client(
         full_name=payload.full_name,
         phone=payload.phone,
         email=client_email,
-        password_hash=_hash_password(payload.password),
+        password_hash=get_password_hash(payload.password),
         role="client",
         is_active=True,
     )
@@ -158,7 +149,7 @@ async def login_client(
     )
     user = result.scalar_one_or_none()
 
-    if not user or not _verify_password(payload.password, user.password_hash):
+    if not user or not verify_password(payload.password, user.password_hash):
         raise HTTPException(status_code=401, detail="Teléfono o contraseña incorrectos")
     if not user.is_active:
         raise HTTPException(status_code=403, detail="Cuenta desactivada")
@@ -204,7 +195,7 @@ async def request_trip(
         )
 
     # Calcular distancia aproximada (Haversine simple)
-    from math import radians, cos, sin, asin, sqrt
+    from math import asin, cos, radians, sin, sqrt
     def haversine(lat1, lon1, lat2, lon2):
         R = 6371
         dlat = radians(lat2 - lat1)
@@ -224,7 +215,7 @@ async def request_trip(
     nearest_driver_result = await db.execute(
         select(DriverLocation).where(
             and_(
-                DriverLocation.is_online == True,
+                DriverLocation.is_online.is_(True),
                 DriverLocation.trip_id.is_(None),
             )
         ).limit(1)

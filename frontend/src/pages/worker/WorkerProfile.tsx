@@ -5,7 +5,7 @@ import { ArrowLeft, Star, Bike, Trophy, TrendingUp, Shield, Zap, Award, Loader2 
 import { useNavigate } from 'react-router';
 
 // ✅ API desde env var
-const API = import.meta.env.VITE_API_URL ?? '';
+import { API_BASE as API } from "@/lib/apiConfig";
 
 // Niveles de gamificación — datos de configuración del producto (no son "datos de usuario")
 const LEVELS: WorkerLevel[] = [

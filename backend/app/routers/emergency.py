@@ -1,17 +1,17 @@
 """Emergency router for panic button and audio streaming."""
 
 import uuid
-from typing import List, Optional
-from datetime import datetime
+from datetime import UTC, datetime
+
 from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, desc
 from geoalchemy2 import WKTElement
+from sqlalchemy import desc, func, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.models.emergency import EmergencyLog
-from app.routers.auth import get_current_user
 from app.models.users import User
+from app.routers.auth import get_current_user
 
 router = APIRouter(prefix="/emergency", tags=["emergency"])
 
@@ -23,8 +23,8 @@ emergency_connections = {}
 async def trigger_emergency(
     driver_id: uuid.UUID,
     type: str = "panic_button",
-    latitude: Optional[float] = None,
-    longitude: Optional[float] = None,
+    latitude: float | None = None,
+    longitude: float | None = None,
     db: AsyncSession = Depends(get_db),
     _: User = Depends(get_current_user)
 ):
@@ -44,7 +44,7 @@ async def trigger_emergency(
     await db.refresh(emergency)
 
     return {
-        "message": "Emergency triggered",
+        "message": "Emergencia activada",
         "emergency_id": str(emergency.id),
         "status": "active",
         "timestamp": emergency.created_at.isoformat()
@@ -90,7 +90,7 @@ async def get_active_emergencies(
 @router.patch("/{emergency_id}/resolve")
 async def resolve_emergency(
     emergency_id: uuid.UUID,
-    notes: Optional[str] = None,
+    notes: str | None = None,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user)
 ):
@@ -100,16 +100,16 @@ async def resolve_emergency(
     )
     emergency = result.scalar_one_or_none()
     if not emergency:
-        raise HTTPException(status_code=404, detail="Emergency not found")
+        raise HTTPException(status_code=404, detail="Emergencia no encontrada")
 
     emergency.status = "resolved"
     emergency.resolved_by = user.id
-    emergency.resolved_at = datetime.utcnow()
+    emergency.resolved_at = datetime.now(UTC)
     if notes:
         emergency.notes = notes
 
     await db.commit()
-    return {"message": "Emergency resolved", "emergency_id": str(emergency_id)}
+    return {"message": "Emergencia resuelta", "emergency_id": str(emergency_id)}
 
 
 @router.websocket("/audio/{emergency_id}")

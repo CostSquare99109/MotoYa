@@ -6,7 +6,7 @@ import { Label } from '@/components/ui/label';
 import { useStore } from '@/hooks/useStore';
 import { authFetch, PasswordField, ErrorAlert, AuthForm } from '@/components/auth/AuthComponents';
 
-const API = import.meta.env.VITE_API_URL ?? '';
+import { API_BASE as API } from "@/lib/apiConfig";
 
 export default function LoginPage() {
   const navigate = useNavigate();

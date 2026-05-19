@@ -1,19 +1,22 @@
 """Schemas Pydantic para el rol Client (pasajero/cliente)."""
 
 from __future__ import annotations
-from datetime import datetime
-from typing import Optional
+
+from typing import TYPE_CHECKING
+
 from pydantic import BaseModel, EmailStr, Field, field_validator
 
-from app.schemas.validators import validate_phone, validate_name
+from app.schemas.validators import validate_name, validate_phone
 
+if TYPE_CHECKING:
+ from datetime import datetime
 
 # ── Registro de cliente ───────────────────────────────────────────────────────
 
 class ClientRegisterSchema(BaseModel):
  full_name: str = Field(..., min_length=2, max_length=100)
  phone: str = Field(..., min_length=7, max_length=20)
- email: Optional[EmailStr] = None
+ email: EmailStr | None = None
  password: str = Field(..., min_length=6)
 
  _validate_name = field_validator('full_name')(validate_name)
@@ -34,7 +37,7 @@ class ClientLoginSchema(BaseModel):
 class ClientAuthResponseSchema(BaseModel):
     access_token: str
     token_type: str = "bearer"
-    client: "ClientProfileSchema"
+    client: ClientProfileSchema
 
 
 # ── Perfil del cliente ────────────────────────────────────────────────────────
@@ -43,12 +46,12 @@ class ClientProfileSchema(BaseModel):
     id: str
     full_name: str
     phone: str
-    email: Optional[str] = None
+    email: str | None = None
     rating: float
     total_trips: int
     wallet_balance: float
     is_verified: bool
-    avatar_url: Optional[str] = None
+    avatar_url: str | None = None
 
     class Config:
         from_attributes = True
@@ -64,7 +67,7 @@ class TripRequestSchema(BaseModel):
     dropoff_lat: float
     dropoff_lng: float
     payment_method: str = Field(default="cash", pattern="^(cash|wallet)$")
-    notes: Optional[str] = None
+    notes: str | None = None
 
 
 # ── Estado del viaje para el cliente ─────────────────────────────────────────
@@ -74,15 +77,15 @@ class ClientTripStatusSchema(BaseModel):
     status: str
     pickup_address: str
     dropoff_address: str
-    fare: Optional[float] = None
-    distance_km: Optional[float] = None
+    fare: float | None = None
+    distance_km: float | None = None
     payment_method: str
-    driver_name: Optional[str] = None
-    driver_phone: Optional[str] = None
-    driver_rating: Optional[float] = None
-    driver_location: Optional[dict] = None  # {"lat": x, "lng": y}
+    driver_name: str | None = None
+    driver_phone: str | None = None
+    driver_rating: float | None = None
+    driver_location: dict | None = None  # {"lat": x, "lng": y}
     created_at: datetime
-    estimated_arrival_min: Optional[int] = None
+    estimated_arrival_min: int | None = None
 
     class Config:
         from_attributes = True
@@ -92,4 +95,4 @@ class ClientTripStatusSchema(BaseModel):
 
 class TripRatingSchema(BaseModel):
     rating: int = Field(..., ge=1, le=5)
-    comment: Optional[str] = None
+    comment: str | None = None

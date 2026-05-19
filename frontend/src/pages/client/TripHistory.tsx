@@ -20,20 +20,7 @@ const PAYMENT_LABEL: Record<string, string> = {
   cash: '💵', card: '💳', nequi: '📱', daviplata: '📱',
 };
 
-// Demo data
-const generateMockTrips = (n: number): Trip[] =>
-  Array.from({ length: n }, (_, i) => ({
-    id: `trip-${i}`,
-    pickup_address: ['Carrera 5 #10-20', 'Calle 8 Parque', 'Terminal Carepa'][i % 3] + ', Carepa',
-    dropoff_address: ['Hospital Municipal', 'Centro Comercial', 'Aeropuerto Los Cedros'][i % 3] + ', Carepa',
-    status: i % 7 === 0 ? 'cancelled' : 'completed',
-    fare: 5_000 + (i * 1_300) % 15_000,
-    payment_method: ['cash', 'nequi', 'card'][i % 3] as Trip['payment_method'],
-    rating: i % 5 === 0 ? undefined : 4 + (i % 2),
-    distance_km: 1.2 + (i * 0.8) % 8,
-    duration_min: 5 + (i * 3) % 25,
-    created_at: new Date(Date.now() - i * 86_400_000 / 2).toISOString(),
-  }));
+// No mock data — production code must use real API only
 
 export default function TripHistory() {
   const navigate = useNavigate();
@@ -61,12 +48,10 @@ export default function TripHistory() {
         if (d) { setTrips(d.trips ?? d); setTotal(d.total ?? (d.length ?? 0)); }
         else throw new Error();
       })
-      .catch(() => {
-        const mock = generateMockTrips(47);
-        const filtered = filter === 'all' ? mock : mock.filter(t => t.status === filter);
-        setTotal(filtered.length);
-        setTrips(filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE));
-      })
+.catch(() => {
+    setTrips([]);
+    setTotal(0);
+  })
       .finally(() => setLoading(false));
   }, [page, filter, token]);
 

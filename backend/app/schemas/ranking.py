@@ -1,8 +1,8 @@
 """Pydantic schemas for ranking/gamification endpoints."""
 
 from datetime import datetime
-from typing import List, Optional
 from uuid import UUID
+
 from pydantic import BaseModel, ConfigDict
 
 
@@ -11,7 +11,7 @@ class RankingResponse(BaseModel):
 
     id: UUID
     driver_id: UUID
-    driver_name: Optional[str] = None
+    driver_name: str | None = None
     tier: str
     points: int
     weekly_trips: int
@@ -19,7 +19,7 @@ class RankingResponse(BaseModel):
     acceptance_rate: float
     rating_avg: float
     streak_days: int
-    badges: List[str]
+    badges: list[str]
     updated_at: datetime
 
 
@@ -27,7 +27,7 @@ class TierConfig(BaseModel):
     tier: str
     min_points: int
     commission_rate: float
-    benefits: List[str]
+    benefits: list[str]
 
 
 class LeaderboardEntry(BaseModel):
@@ -38,4 +38,4 @@ class LeaderboardEntry(BaseModel):
     points: int
     monthly_trips: int
     rating_avg: float
-    badges: List[str]
+    badges: list[str]

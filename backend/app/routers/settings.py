@@ -1,13 +1,13 @@
 """Settings router - GET and PUT platform configuration stored in PostgreSQL."""
 
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.ext.asyncio import AsyncSession
+from fastapi import APIRouter, Depends
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.models.settings import PlatformSettings
-from app.schemas.settings import PlatformSettingsIn, PlatformSettingsOut
 from app.routers.auth import get_current_admin
+from app.schemas.settings import PlatformSettingsIn, PlatformSettingsOut
 
 router = APIRouter(prefix="/settings", tags=["settings"])
 

@@ -1,12 +1,13 @@
 """Pydantic schemas for trip endpoints."""
 
 from datetime import datetime
-from typing import Optional, Any
+from typing import Any
 from uuid import UUID
-from pydantic import BaseModel, Field, ConfigDict, field_validator
+
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
-def _wkb_to_dict(value: Any) -> Optional[dict]:
+def _wkb_to_dict(value: Any) -> dict | None:
     """
     Convierte un WKBElement de PostGIS (o WKTElement) a {"lat": float, "lng": float}.
     Si ya es dict o None, lo devuelve tal cual.
@@ -51,12 +52,12 @@ def _wkb_to_dict(value: Any) -> Optional[dict]:
 
 
 class TripBase(BaseModel):
-    passenger_name: Optional[str] = None
-    passenger_phone: Optional[str] = None
+    passenger_name: str | None = None
+    passenger_phone: str | None = None
     pickup_address: str = Field(..., min_length=1)
     dropoff_address: str = Field(..., min_length=1)
     payment_method: str = "cash"
-    notes: Optional[str] = None
+    notes: str | None = None
 
 
 class TripCreate(TripBase):
@@ -67,32 +68,32 @@ class TripCreate(TripBase):
 
 
 class TripUpdate(BaseModel):
-    status:    Optional[str]   = None
-    driver_id: Optional[UUID]  = None
-    fare:      Optional[float] = None
-    rating:    Optional[int]   = Field(None, ge=1, le=5)
-    notes:     Optional[str]   = None
+    status:    str | None   = None
+    driver_id: UUID | None  = None
+    fare:      float | None = None
+    rating:    int | None   = Field(None, ge=1, le=5)
+    notes:     str | None   = None
 
 
 class TripResponse(TripBase):
     model_config = ConfigDict(from_attributes=True, arbitrary_types_allowed=True)
 
     id:               UUID
-    driver_id:        Optional[UUID]  = None
+    driver_id:        UUID | None  = None
     status:           str
-    fare:             Optional[float] = None
-    commission:       Optional[float] = None
-    distance_km:      Optional[float] = None
-    duration_min:     Optional[int]   = None
-    pickup_location:  Optional[dict]  = None
-    dropoff_location: Optional[dict]  = None
-    rating:           Optional[int]   = None
+    fare:             float | None = None
+    commission:       float | None = None
+    distance_km:      float | None = None
+    duration_min:     int | None   = None
+    pickup_location:  dict | None  = None
+    dropoff_location: dict | None  = None
+    rating:           int | None   = None
     created_at:       datetime
     updated_at:       datetime
 
     @field_validator("pickup_location", "dropoff_location", mode="before")
     @classmethod
-    def parse_geo(cls, v: Any) -> Optional[dict]:
+    def parse_geo(cls, v: Any) -> dict | None:
         return _wkb_to_dict(v)
 
 

@@ -1,30 +1,42 @@
 """Shipment (Moto-Envio) logistics router."""
 
-import uuid
 import os
 import shutil
-from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, and_
-from geoalchemy2 import WKTElement
+import uuid
 
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
+from geoalchemy2 import WKTElement
+from sqlalchemy import and_, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.config import get_settings
 from app.database import get_db
 from app.models.shipments import Shipment
-from app.schemas.shipment import ShipmentCreate, ShipmentUpdate, ShipmentResponse, VoiceCommandRequest
-from app.routers.auth import get_current_user
 from app.models.users import User
-from app.config import get_settings
+from app.routers.auth import get_current_user
+from app.schemas.shipment import (
+    ShipmentCreate,
+    ShipmentResponse,
+    ShipmentUpdate,
+    VoiceCommandRequest,
+)
 
 router = APIRouter(prefix="/shipments", tags=["shipments"])
 settings = get_settings()
-os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
+
+_ALLOWED_PHOTO_EXT = {".jpg", ".jpeg", ".png", ".webp", ".pdf"}
+
+def _ensure_upload_dir():
+    """Crea el directorio de uploads solo cuando se necesita."""
+    os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
 
 
-@router.get("", response_model=List[ShipmentResponse])
+@router.get("", response_model=list[ShipmentResponse])
 async def list_shipments(
-    status: Optional[str] = Query(None),
-    driver_id: Optional[uuid.UUID] = None,
+    status: str | None = Query(None),
+    driver_id: uuid.UUID | None = None,
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=500),
     db: AsyncSession = Depends(get_db),
     _: User = Depends(get_current_user)
 ):
@@ -37,7 +49,7 @@ async def list_shipments(
         filters.append(Shipment.driver_id == driver_id)
     if filters:
         query = query.where(and_(*filters))
-    query = query.order_by(Shipment.created_at.desc())
+    query = query.order_by(Shipment.created_at.desc()).offset(skip).limit(limit)
     result = await db.execute(query)
     return result.scalars().all()
 
@@ -84,7 +96,7 @@ async def get_shipment(
     result = await db.execute(select(Shipment).where(Shipment.id == shipment_id))
     shipment = result.scalar_one_or_none()
     if not shipment:
-        raise HTTPException(status_code=404, detail="Shipment not found")
+        raise HTTPException(status_code=404, detail="Envío no encontrado")
     return shipment
 
 
@@ -99,7 +111,7 @@ async def update_shipment_status(
     result = await db.execute(select(Shipment).where(Shipment.id == shipment_id))
     shipment = result.scalar_one_or_none()
     if not shipment:
-        raise HTTPException(status_code=404, detail="Shipment not found")
+        raise HTTPException(status_code=404, detail="Envío no encontrado")
 
     if data.status:
         shipment.status = data.status
@@ -109,25 +121,28 @@ async def update_shipment_status(
         shipment.fare = data.fare
 
     await db.commit()
-    return {"message": "Shipment updated", "status": shipment.status}
+    return {"message": "Envío actualizado", "status": shipment.status}
 
 
 @router.post("/{shipment_id}/photos")
 async def upload_photos(
     shipment_id: uuid.UUID,
-    files: List[UploadFile] = File(...),
+    files: list[UploadFile] = File(...),
     db: AsyncSession = Depends(get_db),
     _: User = Depends(get_current_user)
 ):
     """Upload package photos for shipment tracking."""
+    _ensure_upload_dir()
     result = await db.execute(select(Shipment).where(Shipment.id == shipment_id))
     shipment = result.scalar_one_or_none()
     if not shipment:
-        raise HTTPException(status_code=404, detail="Shipment not found")
+        raise HTTPException(status_code=404, detail="Envío no encontrado")
 
     uploaded_urls = []
     for file in files:
-        file_ext = os.path.splitext(file.filename)[1]
+        file_ext = (os.path.splitext(file.filename or "photo.jpg")[1] or ".jpg").lower()
+    if file_ext not in _ALLOWED_PHOTO_EXT:
+        raise HTTPException(400, detail=f"Extensión no permitida: {file_ext}. Use: {', '.join(sorted(_ALLOWED_PHOTO_EXT))}")
         filename = f"shipment_{shipment_id}_{uuid.uuid4().hex}{file_ext}"
         filepath = os.path.join(settings.UPLOAD_DIR, filename)
 
@@ -141,7 +156,7 @@ async def upload_photos(
     shipment.photos = existing + uploaded_urls
     await db.commit()
 
-    return {"message": f"{len(uploaded_urls)} photos uploaded", "photos": uploaded_urls}
+    return {"message": f"{len(uploaded_urls)} fotos subidas", "photos": uploaded_urls}
 
 
 @router.post("/voice")
@@ -153,7 +168,7 @@ async def process_voice_command(
     """Process voice command for shipment operations.
 
     Supported commands (Spanish):
-    - "Aceptar viaje" / "aceptar envio" -> Assign to driver
+        - "Aceptar viaje" / "aceptar envio" -> Assign to driver
     - "Completar entrega" / "entregado" -> Mark as delivered
     - "Emergencia" / "ayuda" -> Trigger emergency
     - "Estado" -> Get current status
@@ -185,12 +200,12 @@ async def process_voice_command(
 
             # Record voice command
             existing = shipment.voice_commands or []
-            shipment.voice_commands = existing + [data.audio_text]
+            shipment.voice_commands = [*existing, data.audio_text]
             await db.commit()
 
     return {
         "command": data.audio_text,
         "action": action,
         "shipment_id": str(data.shipment_id) if data.shipment_id else None,
-        "message": f"Command '{action}' processed successfully"
+        "message": f"Comando '{action}' procesado exitosamente"
     }

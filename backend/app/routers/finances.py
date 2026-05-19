@@ -1,32 +1,32 @@
 """Finance and earnings router."""
 
 import uuid
-from typing import List, Optional
-from datetime import datetime
+from datetime import UTC, datetime
+
 from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, and_
 
 from app.database import get_db
-from app.models.finances import Earning
 from app.models.drivers import Driver
+from app.models.finances import Earning
 from app.models.rankings import Ranking
-from app.schemas.finance import EarningCreate, EarningResponse, FinanceSummary, DriverFinanceDetail
-from app.routers.auth import get_current_user
 from app.models.users import User
+from app.routers.auth import get_current_user
+from app.schemas.finance import DriverFinanceDetail, EarningCreate, EarningResponse, FinanceSummary
 
 router = APIRouter(prefix="/finances", tags=["finances"])
 
 
 @router.get("/summary", response_model=FinanceSummary)
 async def get_finance_summary(
-    period: Optional[str] = Query(None, description="YYYY-MM format"),
+    period: str | None = Query(None, description="YYYY-MM format"),
     db: AsyncSession = Depends(get_db),
     _: User = Depends(get_current_user)
 ):
     """Get overall earnings summary."""
     if not period:
-        period = datetime.utcnow().strftime("%Y-%m")
+        period = datetime.now(UTC).strftime("%Y-%m")
 
     result = await db.execute(
         select(
@@ -57,13 +57,13 @@ async def get_finance_summary(
 @router.get("/driver/{driver_id}", response_model=DriverFinanceDetail)
 async def get_driver_finance(
     driver_id: uuid.UUID,
-    period: Optional[str] = Query(None),
+    period: str | None = Query(None),
     db: AsyncSession = Depends(get_db),
     _: User = Depends(get_current_user)
 ):
     """Get earnings breakdown for a specific driver."""
     if not period:
-        period = datetime.utcnow().strftime("%Y-%m")
+        period = datetime.now(UTC).strftime("%Y-%m")
 
     # Get driver name
     driver_result = await db.execute(
@@ -71,7 +71,7 @@ async def get_driver_finance(
     )
     driver_name = driver_result.scalar()
     if not driver_name:
-        raise HTTPException(status_code=404, detail="Driver not found")
+        raise HTTPException(status_code=404, detail="Conductor no encontrado")
 
     # Get earnings
     result = await db.execute(
@@ -124,7 +124,7 @@ async def create_earning(
     commission = data.gross_amount * rate
     net_amount = data.gross_amount - commission - data.fuel_cost
 
-    period = datetime.utcnow().strftime("%Y-%m")
+    period = datetime.now(UTC).strftime("%Y-%m")
 
     earning = Earning(
         driver_id=data.driver_id,
@@ -142,7 +142,7 @@ async def create_earning(
     return earning
 
 
-@router.get("/period", response_model=List[FinanceSummary])
+@router.get("/period", response_model=list[FinanceSummary])
 async def get_period_report(
     start_period: str = Query(..., description="YYYY-MM"),
     end_period: str = Query(..., description="YYYY-MM"),

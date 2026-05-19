@@ -19,8 +19,8 @@ import {
 } from 'lucide-react';
 
 // ── Config ────────────────────────────────────────────────────────────────────
-const API    = import.meta.env.VITE_API_URL ?? '';
-const WS_BASE = (import.meta.env.VITE_WS_URL ?? 'ws://localhost:8000').replace(/\/$/, '');
+import { API_BASE as API } from "@/lib/apiConfig";
+const WS_BASE = (import.meta.env.VITE_WS_URL ?? '').replace(/\/$/, '');
 const CAREPA: [number, number] = [7.7622, -76.6569];
 
 // ── Iconos ────────────────────────────────────────────────────────────────────
@@ -148,10 +148,10 @@ export default function LiveMap() {
         setPendingTrips(prev => prev.filter(t => t.id !== msg.trip.id));
         setSelectedTrip(sel => sel?.id === msg.trip.id ? null : sel);
       }
-    } catch (_) {}
-  }, []);
+ } catch (e) { console.warn('[LiveMap] WS parse error:', e); }
+ }, []);
 
-  const { status: wsStatus } = useWebSocket({
+ const { status: wsStatus } = useWebSocket({
     url: wsUrl, enabled: !!token, onMessage: handleWsMessage,
   });
 
@@ -204,8 +204,8 @@ export default function LiveMap() {
         pending:  stats.pending_trips ?? 0,
         assigned: stats.total_trips ?? 0,
       });
-    } catch (_) {}
-  }, [token, authH]);
+ } catch (e) { console.error('[LiveMap] Error loading stats:', e); }
+ }, [token, authH]);
 
   useEffect(() => { loadPendingTrips(); loadStats(); }, [loadPendingTrips, loadStats]);
 

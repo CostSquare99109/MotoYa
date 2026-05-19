@@ -1,10 +1,13 @@
 """Schemas Pydantic para el rol Worker (mototaxista)."""
 
 from __future__ import annotations
-from datetime import datetime
-from typing import Optional, List
+
+from typing import TYPE_CHECKING
+
 from pydantic import BaseModel, Field
 
+if TYPE_CHECKING:
+    from datetime import datetime
 
 # ── Solicitud de viaje entrante que ve el conductor ──────────────────────────
 
@@ -26,7 +29,7 @@ class IncomingTripSchema(BaseModel):
 
 class TripResponseSchema(BaseModel):
     action: str = Field(..., pattern="^(accept|reject)$")
-    reject_reason: Optional[str] = None
+    reject_reason: str | None = None
 
 
 # ── Actualización de estado del viaje ────────────────────────────────────────
@@ -36,7 +39,7 @@ class TripStatusUpdateSchema(BaseModel):
         ...,
         pattern="^(picked_up|in_progress|completed|cancelled)$"
     )
-    notes: Optional[str] = None
+    notes: str | None = None
 
 
 # ── Estado del conductor (online / offline) ──────────────────────────────────
@@ -54,7 +57,7 @@ class WorkerStatsSchema(BaseModel):
     phone: str
     status: str
     is_online: bool
-    profile_photo_url: Optional[str] = None
+    profile_photo_url: str | None = None
 
     # Métricas core
     rating: float
@@ -69,7 +72,7 @@ class WorkerStatsSchema(BaseModel):
     # Gamificación (el frontend los renderiza en WorkerProfile)
     acceptance_rate: float = 100.0  # ✅ antes faltaba (porcentaje 0-100)
     points: int = 0                 # ✅ antes faltaba (para niveles)
-    badges: List[str] = []          # ✅ antes faltaba
+    badges: list[str] = []          # ✅ antes faltaba
 
     class Config:
         from_attributes = True

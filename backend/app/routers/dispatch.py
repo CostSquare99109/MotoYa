@@ -1,18 +1,18 @@
 """Dispatch engine — asignación manual, automática y notificaciones en tiempo real."""
 
 import uuid
-from typing import List
+
 from fastapi import APIRouter, Depends, HTTPException
+from geoalchemy2 import WKTElement
+from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, and_
 
 from app.database import get_db
 from app.models.drivers import Driver
 from app.models.trips import Trip, TripStatusHistory
-from app.schemas.driver import NearbyDriverQuery, NearbyDriverResponse
-from app.routers.auth import get_current_user
 from app.models.users import User
-from geoalchemy2 import WKTElement
+from app.routers.auth import get_current_user
+from app.schemas.driver import NearbyDriverQuery, NearbyDriverResponse
 
 router = APIRouter(prefix="/dispatch", tags=["dispatch"])
 
@@ -61,7 +61,7 @@ async def _build_trip_request_payload(trip: Trip) -> dict:
 
 # ── POST /dispatch/nearby ─────────────────────────────────────────────────────
 
-@router.post("/nearby", response_model=List[NearbyDriverResponse])
+@router.post("/nearby", response_model=list[NearbyDriverResponse])
 async def find_nearby_drivers(
     query: NearbyDriverQuery,
     db: AsyncSession = Depends(get_db),
@@ -75,7 +75,7 @@ async def find_nearby_drivers(
         select(Driver, distance_col)
         .where(
             and_(
-                Driver.is_online == True,
+                Driver.is_online.is_(True),
                 Driver.status == "active",
                 func.ST_DWithin(Driver.current_location, point, query.radius_km * 1000),
             )
@@ -186,7 +186,7 @@ async def auto_assign(
         select(Driver, distance_col)
         .where(
             and_(
-                Driver.is_online == True,
+                Driver.is_online.is_(True),
                 Driver.status    == "active",
                 func.ST_DWithin(Driver.current_location, point, 5_000),
             )
@@ -261,7 +261,7 @@ async def get_heatmap_data(
         select(
             func.ST_X(Driver.current_location).label("lng"),
             func.ST_Y(Driver.current_location).label("lat"),
-        ).where(and_(Driver.is_online == True, Driver.status == "active"))
+        ).where(and_(Driver.is_online.is_(True), Driver.status == "active"))
     )
     driver_points = [
         {"lat": float(r.lat), "lng": float(r.lng)}

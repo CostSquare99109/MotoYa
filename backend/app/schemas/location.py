@@ -1,10 +1,13 @@
 """Schemas Pydantic para el sistema de ubicación en tiempo real."""
 
 from __future__ import annotations
-from datetime import datetime
-from typing import Optional
+
+from typing import TYPE_CHECKING
+
 from pydantic import BaseModel, Field
 
+if TYPE_CHECKING:
+    from datetime import datetime
 
 # ── Payload que envía el conductor por WebSocket ──────────────────────────────
 
@@ -21,7 +24,7 @@ class LocationUpdateSchema(BaseModel):
 class LocationBroadcastSchema(BaseModel):
     driver_id: str
     driver_name: str
-    trip_id: Optional[str] = None
+    trip_id: str | None = None
     latitude: float
     longitude: float
     bearing: float
@@ -43,7 +46,7 @@ class DriverLocationResponseSchema(BaseModel):
     bearing: float
     speed_kmh: float
     is_online: bool
-    trip_id: Optional[str] = None
+    trip_id: str | None = None
     updated_at: datetime
 
     class Config:

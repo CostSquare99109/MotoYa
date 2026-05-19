@@ -1,13 +1,12 @@
 """Shared validators for Pydantic schemas."""
 
 import re
-from pydantic import field_validator
 
 # Regex para teléfonos internacionales: +573001234567 o 3001234567
 PHONE_REGEX = re.compile(r'^\+?\d{7,15}$')
 
 # Regex para nombres (letras, espacios, acentos, guiones)
-NAME_REGEX = re.compile(r'^[\p{L}\s\-\']+$', re.UNICODE)
+NAME_REGEX = re.compile(r"^[a-zA-ZáéíóúÁÉÍÓÚñÑüÜàèìòùÀÈÌÒÙ\s\-']+$")
 
 
 def validate_phone(v: str) -> str:

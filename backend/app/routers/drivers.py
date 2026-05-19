@@ -1,39 +1,40 @@
 """Driver CRUD router with selfie upload support."""
 
-import uuid
 import os
 import shutil
-from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, and_, or_
-from sqlalchemy.exc import IntegrityError
-from passlib.context import CryptContext
+import uuid
 
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
+from sqlalchemy import and_, func, or_, select
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.config import get_settings
 from app.database import get_db
 from app.models.drivers import Driver, DriverSelfie
-from app.models.users import User
 from app.models.rankings import Ranking
-from app.schemas.driver import (
-    DriverCreate, DriverUpdate, DriverResponse, DriverLocationUpdate
-)
-from app.routers.auth import get_current_user, get_current_admin
-from app.config import get_settings
+from app.models.users import User
+from app.routers.auth import get_current_admin, get_current_user, get_password_hash
+from app.schemas.driver import DriverCreate, DriverLocationUpdate, DriverResponse, DriverUpdate
 
 router = APIRouter(prefix="/drivers", tags=["drivers"])
 settings = get_settings()
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
-os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
+_ALLOWED_IMAGE_EXT = {".jpg", ".jpeg", ".png", ".webp"}
+
+
+def _ensure_upload_dir():
+    """Crea el directorio de uploads solo cuando se necesita."""
+    os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
 
 
 # ── GET /drivers ──────────────────────────────────────────────────────────────
 
-@router.get("", response_model=List[DriverResponse])
+@router.get("", response_model=list[DriverResponse])
 async def list_drivers(
-    status: Optional[str] = Query(None),
-    is_online: Optional[bool] = Query(None),
-    search: Optional[str] = Query(None),
+    status: str | None = Query(None),
+    is_online: bool | None = Query(None),
+    search: str | None = Query(None),
     skip: int = Query(0, ge=0),
     # ✅ limit ampliado a 500 — LiveMap pedía 200 y recibía 422
     limit: int = Query(50, ge=1, le=500),
@@ -96,13 +97,13 @@ async def create_driver(
     if existing_user:
         user = existing_user
         # Actualizar contraseña con la nueva
-        user.password_hash = pwd_context.hash(raw_password)
+        user.password_hash = get_password_hash(raw_password)
     else:
         user = User(
             id=uuid.uuid4(),
             full_name=data.full_name,
             email=email,
-            password_hash=pwd_context.hash(raw_password),
+            password_hash=get_password_hash(raw_password),
             role="worker",
             is_active=True,
         )
@@ -178,7 +179,7 @@ async def update_driver(
         user_result = await db.execute(select(User).where(User.id == driver.user_id))
         user = user_result.scalar_one_or_none()
         if user:
-            user.password_hash = pwd_context.hash(data.password)
+            user.password_hash = get_password_hash(data.password)
 
     try:
         await db.commit()
@@ -222,12 +223,15 @@ async def upload_selfie(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
+    _ensure_upload_dir()
     result = await db.execute(select(Driver).where(Driver.id == driver_id))
     driver = result.scalar_one_or_none()
     if not driver:
         raise HTTPException(404, detail="Conductor no encontrado")
 
-    file_ext = os.path.splitext(file.filename or "photo.jpg")[1] or ".jpg"
+    file_ext = (os.path.splitext(file.filename or "photo.jpg")[1] or ".jpg").lower()
+    if file_ext not in _ALLOWED_IMAGE_EXT:
+        raise HTTPException(400, detail=f"Extensión no permitida: {file_ext}. Use: {', '.join(sorted(_ALLOWED_IMAGE_EXT))}")
     filename = f"selfie_{driver_id}_{uuid.uuid4().hex}{file_ext}"
     filepath = os.path.join(settings.UPLOAD_DIR, filename)
 

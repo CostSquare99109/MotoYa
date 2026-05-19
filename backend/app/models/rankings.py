@@ -1,17 +1,19 @@
 """Ranking/gamification model for driver tiers and badges."""
 
 import uuid
-from datetime import datetime
-from sqlalchemy import Column, String, Integer, Numeric, ForeignKey, DateTime, ARRAY, Text
-from sqlalchemy.dialects.postgresql import UUID
+from datetime import UTC, datetime
+
+from sqlalchemy import Column, DateTime, ForeignKey, Integer, Numeric, String, Text
+from app.models.types import ArrayJSON, GUID
+
 from app.database import Base
 
 
 class Ranking(Base):
     __tablename__ = "rankings"
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    driver_id = Column(UUID(as_uuid=True), ForeignKey("drivers.id"), unique=True)
+    id = Column(GUID, primary_key=True, default=uuid.uuid4)
+    driver_id = Column(GUID, ForeignKey("drivers.id"), unique=True)
     tier = Column(String(20), default="bronze")  # bronze, silver, gold, platinum
     points = Column(Integer, default=0)
     weekly_trips = Column(Integer, default=0)
@@ -19,5 +21,5 @@ class Ranking(Base):
     acceptance_rate = Column(Numeric(5, 2), default=100.0)
     rating_avg = Column(Numeric(2, 1), default=5.0)
     streak_days = Column(Integer, default=0)
-    badges = Column(ARRAY(Text), default=list)
-    updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
+    badges = Column(ArrayJSON, default=list)
+    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC))

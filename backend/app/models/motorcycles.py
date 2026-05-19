@@ -1,17 +1,19 @@
 """Motorcycle fleet management model."""
 
 import uuid
-from datetime import datetime
-from sqlalchemy import Column, String, Integer, Date, Text, ForeignKey, DateTime
-from sqlalchemy.dialects.postgresql import UUID
+from datetime import UTC, datetime
+
+from sqlalchemy import Column, Date, DateTime, ForeignKey, Integer, String, Text
+from app.models.types import GUID
+
 from app.database import Base
 
 
 class Motorcycle(Base):
     __tablename__ = "motorcycles"
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    driver_id = Column(UUID(as_uuid=True), ForeignKey("drivers.id", ondelete="SET NULL"))
+    id = Column(GUID, primary_key=True, default=uuid.uuid4)
+    driver_id = Column(GUID, ForeignKey("drivers.id", ondelete="SET NULL"))
     plate = Column(String(20), unique=True, nullable=False)
     brand = Column(String(50), nullable=False)
     model = Column(String(50), nullable=False)
@@ -23,5 +25,5 @@ class Motorcycle(Base):
     next_maintenance = Column(Date)
     mileage = Column(Integer, default=0)
     photo_url = Column(Text)
-    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
-    updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
+    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC))

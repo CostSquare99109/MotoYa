@@ -7,7 +7,7 @@ import { useNavigate } from 'react-router';
 import { useStore } from '@/hooks/useStore';
 import { Bike, MapPin, Navigation, Loader2, User, Phone } from 'lucide-react';
 
-const API = import.meta.env.VITE_API_URL ?? '';
+import { API_BASE as API } from "@/lib/apiConfig";
 
 export default function ClientLogin() {
   const navigate = useNavigate();

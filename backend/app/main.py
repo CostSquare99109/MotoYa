@@ -3,31 +3,32 @@
 import os
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request, status
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import JSONResponse
 from slowapi import Limiter, _rate_limit_exceeded_handler
-from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
 
 from app.config import get_settings
-from app.database import engine, Base
+from app.database import Base, engine
+import app.models  # noqa: F401 — register all models with Base.metadata
+
 from app.routers import (
-    auth,
-    drivers,
+ auth,
     dispatch,
-    trips,
-    shipments,
-    finances,
-    rankings,
+    drivers,
     emergency,
+    finances,
     motorcycles,
+    rankings,
+    shipments,
+    trips,
+    worker,
 )
-from app.routers import settings as settings_router
-from app.routers import worker
 from app.routers import client as client_router
 from app.routers import location as location_router
+from app.routers import settings as settings_router
 from app.routers import users as users_router
 
 settings = get_settings()

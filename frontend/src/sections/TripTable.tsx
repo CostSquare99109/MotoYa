@@ -5,10 +5,10 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
 import { MapPin, Clock, User, Eye, ArrowRight, Loader2, AlertCircle, RefreshCw } from "lucide-react";
 
-const API = import.meta.env.VITE_API_URL ?? "";
+import { API_BASE as API, getAuthToken } from "@/lib/apiConfig";
 
 function authHeaders() {
-  const token = localStorage.getItem("token");
+  const token = getAuthToken();
   return {
     "Content-Type": "application/json",
     ...(token ? { Authorization: `Bearer ${token}` } : {}),

@@ -5,27 +5,26 @@ The auth router should only verify credentials and return tokens.
 Driver creation and User-Driver linking belongs here.
 """
 
-from datetime import date
-from typing import Optional
 import uuid
+from datetime import date
 
 from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.users import User
 from app.models.drivers import Driver
 from app.models.rankings import Ranking
+from app.models.users import User
 
 
-async def get_driver_by_phone(db: AsyncSession, phone: str) -> Optional[Driver]:
+async def get_driver_by_phone(db: AsyncSession, phone: str) -> Driver | None:
     """Look up a driver by phone number."""
     result = await db.execute(select(Driver).where(Driver.phone == phone))
     return result.scalar_one_or_none()
 
 
-async def get_user_by_phone(db: AsyncSession, phone: str, role: str = "worker") -> Optional[User]:
+async def get_user_by_phone(db: AsyncSession, phone: str, role: str = "worker") -> User | None:
     """Look up a user by phone and role."""
     result = await db.execute(
         select(User).where(User.phone == phone, User.role == role)
@@ -33,7 +32,7 @@ async def get_user_by_phone(db: AsyncSession, phone: str, role: str = "worker") 
     return result.scalar_one_or_none()
 
 
-async def get_user_by_id(db: AsyncSession, user_id) -> Optional[User]:
+async def get_user_by_id(db: AsyncSession, user_id) -> User | None:
     """Look up a user by ID."""
     result = await db.execute(select(User).where(User.id == user_id))
     return result.scalar_one_or_none()

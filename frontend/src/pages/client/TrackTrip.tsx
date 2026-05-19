@@ -15,8 +15,8 @@ import {
   Bike, CheckCircle, Loader2, ThumbsUp,
 } from 'lucide-react';
 
-const API     = import.meta.env.VITE_API_URL  ?? '';
-const WS_BASE = (import.meta.env.VITE_WS_URL ?? 'ws://localhost:8000').replace(/\/$/, '');
+import { API_BASE as API } from "@/lib/apiConfig";
+const WS_BASE = (import.meta.env.VITE_WS_URL ?? '').replace(/\/$/, '');
 const CAREPA: [number, number] = [7.7622, -76.6569];
 
 // ── Estados del viaje ────────────────────────────────────────────────────────
@@ -103,10 +103,10 @@ export default function TrackTrip() {
       if (msg.type === 'eta_update') {
         setEta(msg.minutes);
       }
-    } catch (_) {}
-  }, []);
+ } catch (e) { console.warn('[TrackTrip] WS parse error:', e); }
+ }, []);
 
-  const { status: wsStatus } = useWebSocket({
+ const { status: wsStatus } = useWebSocket({
     url: wsUrl, enabled: !!token && !!tripId, onMessage: handleMessage,
   });
 
@@ -121,8 +121,8 @@ export default function TrackTrip() {
         const data = await res.json();
         if (data.status) setStatus(data.status);
         if (data.driver) setDriver(data.driver);
-      } catch (_) {}
-    }, 8_000);
+ } catch (e) { console.error('[TrackTrip] Polling error:', e); }
+ }, 8_000);
     return () => clearInterval(interval);
   }, [wsStatus, token, tripId]);
 

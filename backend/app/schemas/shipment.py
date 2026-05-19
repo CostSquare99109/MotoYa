@@ -1,9 +1,9 @@
 """Pydantic schemas for shipment (Moto-Envio) endpoints."""
 
 from datetime import datetime
-from typing import Optional, List
 from uuid import UUID
-from pydantic import BaseModel, Field, ConfigDict, field_validator
+
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class ShipmentBase(BaseModel):
@@ -13,9 +13,9 @@ class ShipmentBase(BaseModel):
     receiver_phone:   str = Field(..., min_length=5,  max_length=20)
     pickup_address:   str = Field(..., min_length=1)
     delivery_address: str = Field(..., min_length=1)
-    description:      Optional[str]   = None
-    weight_kg:        Optional[float] = None
-    dimensions:       Optional[str]   = None
+    description:      str | None   = None
+    weight_kg:        float | None = None
+    dimensions:       str | None   = None
 
 
 class ShipmentCreate(ShipmentBase):
@@ -26,22 +26,22 @@ class ShipmentCreate(ShipmentBase):
 
 
 class ShipmentUpdate(BaseModel):
-    status:    Optional[str]   = None
-    driver_id: Optional[UUID]  = None
-    fare:      Optional[float] = None
+    status:    str | None   = None
+    driver_id: UUID | None  = None
+    fare:      float | None = None
 
 
 class ShipmentResponse(ShipmentBase):
     model_config = ConfigDict(from_attributes=True)
 
     id:                UUID
-    driver_id:         Optional[UUID]  = None
+    driver_id:         UUID | None  = None
     status:            str
-    fare:              Optional[float] = None
-    photos:            List[str]
-    voice_commands:    List[str]
-    pickup_location:   Optional[dict]  = None
-    delivery_location: Optional[dict]  = None
+    fare:              float | None = None
+    photos:            list[str]
+    voice_commands:    list[str]
+    pickup_location:   dict | None  = None
+    delivery_location: dict | None  = None
     created_at:        datetime
     updated_at:        datetime
 
@@ -61,4 +61,4 @@ class ShipmentResponse(ShipmentBase):
 
 class VoiceCommandRequest(BaseModel):
     audio_text:  str           = Field(..., min_length=1)
-    shipment_id: Optional[UUID] = None
+    shipment_id: UUID | None = None

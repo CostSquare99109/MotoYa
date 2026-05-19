@@ -1,19 +1,18 @@
 """Users CRUD router — admin backoffice."""
 
 import uuid
-from typing import List, Optional
-from datetime import datetime, date
+from datetime import UTC, date, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, or_
-from sqlalchemy.exc import IntegrityError
 from pydantic import BaseModel
+from sqlalchemy import or_, select
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.models.users import User
 from app.models.drivers import Driver
 from app.models.rankings import Ranking
+from app.models.users import User
 from app.routers.auth import get_current_admin, get_password_hash
 
 router = APIRouter(prefix="/users", tags=["users"])
@@ -23,15 +22,15 @@ router = APIRouter(prefix="/users", tags=["users"])
 
 class UserResponseOut(BaseModel):
     id: uuid.UUID
-    email: Optional[str] = None
+    email: str | None = None
     full_name: str
     # ✅ FIX #3a: phone incluido en la respuesta — antes el frontend
     #             recibía phone=undefined y el campo aparecía vacío al editar
-    phone: Optional[str] = None
+    phone: str | None = None
     role: str
     status: str
-    avatar_url: Optional[str] = None
-    created_at: Optional[datetime] = None
+    avatar_url: str | None = None
+    created_at: datetime | None = None
 
     model_config = {"from_attributes": True}
 
@@ -45,47 +44,49 @@ class UserResponseOut(BaseModel):
             role=u.role,
             status="active" if u.is_active else "suspended",
             avatar_url=u.avatar_url,
-            created_at=u.created_at or datetime.utcnow(),
+            created_at=u.created_at or datetime.now(UTC),
         )
 
 
 class UserCreate(BaseModel):
     full_name: str
-    email: Optional[str] = None
-    phone: Optional[str] = None      # ✅ FIX #3b: ya no se ignora
+    email: str | None = None
+    phone: str | None = None      # ✅ FIX #3b: ya no se ignora
     role: str = "client"
     status: str = "active"
-    password: str = "motoya1234"
+    password: str  # Sin default — siempre requiere contraseña explícita
 
 
 class UserUpdate(BaseModel):
-    full_name: Optional[str] = None
-    email: Optional[str] = None
+    full_name: str | None = None
+    email: str | None = None
     # ✅ FIX #3c: phone en el schema de update — antes no existía
-    phone: Optional[str] = None
-    role: Optional[str] = None
-    status: Optional[str] = None
-    password: Optional[str] = None
+    phone: str | None = None
+    role: str | None = None
+    status: str | None = None
+    password: str | None = None
 
 
 # ─── Endpoints ────────────────────────────────────────────────────────────────
 
-@router.get("", response_model=List[UserResponseOut])
+@router.get("", response_model=list[UserResponseOut])
 async def list_users(
-    search: Optional[str] = Query(None),
-    role: Optional[str] = Query(None),
+    search: str | None = Query(None),
+    role: str | None = Query(None),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=500),
     db: AsyncSession = Depends(get_db),
     _: User = Depends(get_current_admin),
 ):
     query = select(User)
     if search:
         query = query.where(or_(
-            User.full_name.ilike(f"%{search}%"),
-            User.email.ilike(f"%{search}%"),
-        ))
+    User.full_name.ilike(f"%{search}%"),
+    User.email.ilike(f"%{search}%"),
+    ))
     if role:
         query = query.where(User.role == role)
-    query = query.order_by(User.created_at.desc())
+    query = query.order_by(User.created_at.desc()).offset(skip).limit(limit)
     result = await db.execute(query)
     users = result.scalars().all()
     return [UserResponseOut.from_user(u) for u in users]
@@ -105,7 +106,7 @@ async def create_user(
         if existing.scalar_one_or_none():
             raise HTTPException(409, detail=f"El email {data.email} ya está registrado")
 
-    password = data.password or "motoya1234"
+    password = data.password  # Sin fallback — el frontend siempre debe enviar contraseña
     user = User(
         full_name=data.full_name,
         email=data.email or f"user_{uuid.uuid4().hex[:8]}@motoya.local",

@@ -157,11 +157,13 @@ export default function ClientHome() {
           payment_method:   payment,
         }),
       });
-      const data = await res.json().catch(() => ({ id: 'demo' }));
-      navigate(`/client/track/${data.id ?? 'demo'}`);
-    } catch {
-      navigate('/client/track/demo');
-    } finally {
+ const data = await res.json();
+ if (!data.id) throw new Error('No trip ID returned');
+ navigate(`/client/track/${data.id}`);
+ } catch (err) {
+ // Show error instead of navigating to fake demo trip
+ alert('Error al solicitar viaje. Intenta de nuevo.');
+ } finally {
       setRequesting(false);
     }
   };

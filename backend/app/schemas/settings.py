@@ -7,7 +7,7 @@ class GeneralSettings(BaseModel):
     platformName: str = "MotoYa"
     city: str = "Carepa"
     department: str = "Antioquia"
-    timezone: str = "america_bogota"
+    timezone: str = "America/Bogota"
     currency: str = "cop"
     darkMode: bool = False
 

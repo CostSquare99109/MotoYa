@@ -1,17 +1,17 @@
 """Gamification and ranking router."""
 
 import uuid
-from typing import List
+
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, desc
 
 from app.database import get_db
-from app.models.rankings import Ranking
 from app.models.drivers import Driver
-from app.schemas.ranking import RankingResponse, TierConfig, LeaderboardEntry
-from app.routers.auth import get_current_user
+from app.models.rankings import Ranking
 from app.models.users import User
+from app.routers.auth import get_current_user
+from app.schemas.ranking import LeaderboardEntry, RankingResponse, TierConfig
 
 router = APIRouter(prefix="/rankings", tags=["rankings"])
 
@@ -44,7 +44,7 @@ def get_tier_from_points(points: int) -> str:
     return "bronze"
 
 
-@router.get("", response_model=List[LeaderboardEntry])
+@router.get("", response_model=list[LeaderboardEntry])
 async def get_leaderboard(
     limit: int = 50,
     db: AsyncSession = Depends(get_db),
@@ -88,7 +88,7 @@ async def get_driver_ranking(
     )
     ranking = result.scalar_one_or_none()
     if not ranking:
-        raise HTTPException(status_code=404, detail="Ranking not found")
+        raise HTTPException(status_code=404, detail="Ranking no encontrado")
 
     # Get driver name
     name_result = await db.execute(
@@ -129,7 +129,7 @@ async def recalculate_rankings(
             updated += 1
 
     await db.commit()
-    return {"message": f"Rankings recalculated. {updated} tiers updated."}
+    return {"message": f"Rankings recalculados. {updated} tiers actualizados."}
 
 
 @router.get("/tiers/config")
@@ -144,7 +144,7 @@ async def get_tier_config(
 async def add_points(
     driver_id: uuid.UUID,
     points: int,
-    badge: str = None,
+    badge: str | None = None,
     db: AsyncSession = Depends(get_db),
     _: User = Depends(get_current_user)
 ):
@@ -167,7 +167,7 @@ async def add_points(
         if badge:
             existing = ranking.badges or []
             if badge not in existing:
-                ranking.badges = existing + [badge]
+                ranking.badges = [*existing, badge]
 
     # Recalculate tier
     ranking.tier = get_tier_from_points(ranking.points)

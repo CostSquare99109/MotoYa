@@ -6,22 +6,22 @@ Canales:
   ws://.../ws/trip/{trip_id}/track?token=<jwt>    → cliente sigue su viaje en tiempo real
 """
 
-import json
 import asyncio
-from datetime import datetime
-from typing import Optional
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query
-from fastapi import Depends
-from jose import JWTError, jwt
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_
+import contextlib
+import json
+from datetime import UTC, datetime
 
-from app.database import get_db, AsyncSessionLocal
-from app.models.users import User
-from app.models.drivers import Driver
-from app.models.driver_location import DriverLocation
-from app.models.trips import Trip
+from fastapi import APIRouter, Depends, Query, WebSocket, WebSocketDisconnect
+from jose import JWTError, jwt
+from sqlalchemy import and_, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.config import get_settings
+from app.database import AsyncSessionLocal, get_db
+from app.models.driver_location import DriverLocation
+from app.models.drivers import Driver
+from app.models.trips import Trip
+from app.models.users import User
 from app.schemas.location import LocationUpdateSchema
 
 router = APIRouter(tags=["location"])
@@ -67,10 +67,8 @@ class LocationConnectionManager:
         self.admins.append(ws)
         if self.last_locations:
             payload = list(self.last_locations.values())
-            try:
+            with contextlib.suppress(Exception):
                 await ws.send_json({"type": "snapshot", "data": payload})
-            except Exception:
-                pass
 
     def disconnect_admin(self, ws: WebSocket) -> None:
         if ws in self.admins:
@@ -153,7 +151,7 @@ manager = LocationConnectionManager()
 # Auth helpers
 # ─────────────────────────────────────────────────────────────────────────────
 
-async def _verify_token(token: str) -> Optional[str]:
+async def _verify_token(token: str) -> str | None:
     """Verifica cualquier JWT y retorna user_id. No requiere campo 'type'."""
     try:
         payload = jwt.decode(token, settings.JWT_SECRET, algorithms=[settings.JWT_ALGORITHM])
@@ -172,7 +170,7 @@ async def get_all_locations(db: AsyncSession = Depends(get_db)):
     result = await db.execute(
         select(DriverLocation, Driver)
         .join(Driver, Driver.id == DriverLocation.driver_id)
-        .where(DriverLocation.is_online == True)
+        .where(DriverLocation.is_online.is_(True))
     )
     rows = result.all()
     return {
@@ -266,7 +264,7 @@ async def ws_driver_location(
                     existing.accuracy_m = loc.accuracy_m
                     existing.is_online  = True
                     existing.trip_id    = active_trip.id if active_trip else None
-                    existing.updated_at = datetime.utcnow()
+                    existing.updated_at = datetime.now(UTC)
                 else:
                     db.add(DriverLocation(
                         driver_id  = driver_id,
@@ -289,7 +287,7 @@ async def ws_driver_location(
                     "speed_kmh":   loc.speed_kmh,
                     "is_online":   True,
                     "trip_id":     str(active_trip.id) if active_trip else None,
-                    "updated_at":  datetime.utcnow().isoformat(),
+ "updated_at": datetime.now(UTC).isoformat(),
                 }
 
             await manager.broadcast_location(driver_id, broadcast_payload)
@@ -403,7 +401,7 @@ async def ws_trip_track(
                         "phone":     drv.phone,
                         "rating":    float(drv.rating or 5.0),
                     }
-            try:
+            with contextlib.suppress(Exception):
                 await websocket.send_json({
                     "type": "trip_update",
                     "trip": {
@@ -414,17 +412,13 @@ async def ws_trip_track(
                         "driver":          driver_info,
                     },
                 })
-            except Exception:
-                pass
 
     # Enviar última posición conocida del conductor
     if trip and trip.driver_id:
         last = manager.last_locations.get(str(trip.driver_id))
         if last:
-            try:
+            with contextlib.suppress(Exception):
                 await websocket.send_json({"type": "location_update", "data": last})
-            except Exception:
-                pass
 
     try:
         while True:

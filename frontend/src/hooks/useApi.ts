@@ -1,7 +1,7 @@
-const API_BASE = "/api";
+import { API_BASE, getAuthToken } from "@/lib/apiConfig";
 
 async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
-  const token = localStorage.getItem("token");
+  const token = getAuthToken();
   const res = await fetch(`${API_BASE}${path}`, {
     ...options,
     headers: {

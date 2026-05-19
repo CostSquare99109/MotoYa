@@ -4,10 +4,47 @@ import type { Driver, Trip, NearbyDriver, HeatmapData, RankingEntry } from "@/ty
 // Coordenadas de Carepa, Antioquia, Colombia
 const CAREPA_CENTER: [number, number] = [7.7622, -76.6569];
 
+/** Safe localStorage.getItem — returns null if localStorage is unavailable. */
+function safeGetItem(key: string): string | null {
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+/** Safe localStorage.setItem — silently fails if localStorage is unavailable. */
+function safeSetItem(key: string, value: string): void {
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    // Private browsing or quota exceeded — ignore
+  }
+}
+
+/** Safe localStorage.removeItem — silently fails if localStorage is unavailable. */
+function safeRemoveItem(key: string): void {
+  try {
+    localStorage.removeItem(key);
+  } catch {
+    // ignore
+  }
+}
+
+/** Safe JSON.parse — returns fallback on error. */
+function safeJsonParse<T>(text: string | null, fallback: T): T {
+  if (!text) return fallback;
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    return fallback;
+  }
+}
+
 // Estado global compartido entre todos los hooks useStore()
 let globalState = {
-  token: localStorage.getItem("token"),
-  user: JSON.parse(localStorage.getItem("user") || "null"),
+  token: safeGetItem("token"),
+  user: safeJsonParse<Record<string, unknown> | null>(safeGetItem("user"), null),
   mapCenter: CAREPA_CENTER as [number, number],
   selectedDriver: null as Driver | null,
   drivers: [] as Driver[],
@@ -26,9 +63,6 @@ function emitChange() {
 export function useStore() {
   const [, setTick] = useState(0);
 
-  // ✅ Corrección: suscripción en useEffect, no en useState
-  // El bug anterior usaba useState(() => subscribe()) que no ejecuta limpieza
-  // correctamente, provocando fugas de memoria y listeners huérfanos.
   const subscribe = useCallback(() => {
     const callback = () => setTick((t) => t + 1);
     listeners.add(callback);
@@ -44,22 +78,22 @@ export function useStore() {
     ...globalState,
 
     setToken: (t: string | null) => {
-      if (t) localStorage.setItem("token", t);
-      else localStorage.removeItem("token");
+      if (t) safeSetItem("token", t);
+      else safeRemoveItem("token");
       globalState.token = t;
       emitChange();
     },
 
     setUser: (u: typeof globalState.user) => {
-      if (u) localStorage.setItem("user", JSON.stringify(u));
-      else localStorage.removeItem("user");
+      if (u) safeSetItem("user", JSON.stringify(u));
+      else safeRemoveItem("user");
       globalState.user = u;
       emitChange();
     },
 
     logout: () => {
-      localStorage.removeItem("token");
-      localStorage.removeItem("user");
+      safeRemoveItem("token");
+      safeRemoveItem("user");
       globalState.token = null;
       globalState.user = null;
       emitChange();
