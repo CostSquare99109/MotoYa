@@ -315,7 +315,7 @@ async def client_quick_login(
                 raise HTTPException(status_code=500, detail="Error al crear cliente")
 
     # ── 3. Generar token ─────────────────────────────────────────────────────
-    access_token = create_access_token({"sub": str(user.id)})
+    access_token = create_access_token({"sub": str(user.id), "role": "client"})
     return {
         "access_token": access_token,
         "token_type": "bearer",

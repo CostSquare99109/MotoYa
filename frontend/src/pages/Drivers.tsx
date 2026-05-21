@@ -33,9 +33,8 @@ export default function Drivers() {
     setLoading(true);
     setError("");
     try {
-      // Trae solo los usuarios con rol "worker" — los mismos que se ven
-      // en /users cuando se filtra por "Conductor"
-      const data = await api.get<User[]>("/users?role=worker");
+ // Trae los conductores desde /api/drivers
+ const data = await api.get<User[]>("/api/drivers");
       setConductores(Array.isArray(data) ? data : []);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Error al cargar conductores");

@@ -74,7 +74,7 @@ export default function UsersPage() {
     setLoading(true);
     setLoadError('');
     try {
-      const data = await api.get<User[]>('/users');
+      const data = await api.get<User[]>('/api/users');
       setUsers(data);
     } catch (err: unknown) {
       setLoadError(err instanceof Error ? err.message : 'Error al cargar usuarios');
@@ -129,7 +129,7 @@ export default function UsersPage() {
     try {
       if (editUser) {
         // PATCH real al backend
-        const updated = await api.patch<User>(`/users/${editUser.id}`, {
+        const updated = await api.patch<User>(`/api/users/${editUser.id}`, {
           full_name: form.full_name,
           email:     form.email || undefined,
           // ✅ FIX: phone ahora se envía en el PATCH — antes estaba ausente
@@ -141,7 +141,7 @@ export default function UsersPage() {
         setUsers(prev => prev.map(u => u.id === editUser.id ? updated : u));
       } else {
         // POST real al backend
-        const created = await api.post<User>('/users', {
+        const created = await api.post<User>('/api/users', {
           full_name: form.full_name,
           email:     form.email || undefined,
           phone:     form.phone || undefined,
@@ -166,7 +166,7 @@ export default function UsersPage() {
     if (!deleteTarget) return;
     setDeleting(true);
     try {
-      await api.del(`/users/${deleteTarget.id}`);
+      await api.del(`/api/users/${deleteTarget.id}`);
       setUsers(prev => prev.filter(u => u.id !== deleteTarget.id));
       setDeleteTarget(null);
     } catch (err: unknown) {

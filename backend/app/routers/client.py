@@ -8,6 +8,7 @@ from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.security import OAuth2PasswordBearer
+from geoalchemy2 import WKTElement
 from geoalchemy2.functions import ST_MakePoint, ST_SetSRID
 from jose import JWTError, jwt
 from slowapi import Limiter
@@ -228,12 +229,12 @@ async def request_trip(
         driver_id=driver_id,
         passenger_name=client.full_name,
         passenger_phone=client.phone,
-        pickup_location=ST_SetSRID(
-            ST_MakePoint(payload.pickup_lng, payload.pickup_lat), 4326
+        pickup_location=WKTElement(
+            f"POINT({payload.pickup_lng} {payload.pickup_lat})", srid=4326
         ),
         pickup_address=payload.pickup_address,
-        dropoff_location=ST_SetSRID(
-            ST_MakePoint(payload.dropoff_lng, payload.dropoff_lat), 4326
+        dropoff_location=WKTElement(
+            f"POINT({payload.dropoff_lng} {payload.dropoff_lat})", srid=4326
         ),
         dropoff_address=payload.dropoff_address,
         fare=round(fare, 2),
@@ -245,14 +246,18 @@ async def request_trip(
     )
     db.add(trip)
 
+    # Flush to get the trip.id generated before creating related records
+    await db.flush()
+
     if driver_id:
         trip.driver_id = driver_id
-        history = TripStatusHistory(
-            trip_id=trip.id,
-            status="pending",
-        )
-        db.add(history)
         nearest_location.trip_id = trip.id
+
+    history = TripStatusHistory(
+        trip_id=trip.id,
+        status="pending",
+    )
+    db.add(history)
 
     await db.commit()
     await db.refresh(trip)

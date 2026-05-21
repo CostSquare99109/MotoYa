@@ -73,44 +73,50 @@ async def list_motorcycles(
     _: User = Depends(get_current_user),
 ):
     """Return all motorcycles, optionally filtered."""
-    query = select(Motorcycle)
-    filters = []
-    if status:
-        filters.append(Motorcycle.status == status)
-    if search:
-        search_pat = f"%{search}%"
-        from sqlalchemy import or_
-        filters.append(
-            or_(
-                Motorcycle.plate.ilike(search_pat),
-                Motorcycle.brand.ilike(search_pat),
-                Motorcycle.model.ilike(search_pat),
+    try:
+        query = select(Motorcycle)
+        filters = []
+        if status:
+            filters.append(Motorcycle.status == status)
+        if search:
+            search_pat = f"%{search}%"
+            from sqlalchemy import or_
+            filters.append(
+                or_(
+                    Motorcycle.plate.ilike(search_pat),
+                    Motorcycle.brand.ilike(search_pat),
+                    Motorcycle.model.ilike(search_pat),
+                )
             )
-        )
-    if filters:
-        query = query.where(and_(*filters))
-    query = query.order_by(Motorcycle.created_at.desc()).offset(skip).limit(limit)
-    result = await db.execute(query)
-    motos = result.scalars().all()
+        if filters:
+            query = query.where(and_(*filters))
+        query = query.order_by(Motorcycle.created_at.desc()).offset(skip).limit(limit)
+        result = await db.execute(query)
+        motos = result.scalars().all()
 
-    out = []
-    for m in motos:
-        item = MotorcycleResponse(
-    id=m.id,
-    plate=m.plate,
-    brand=m.brand,
-    model=m.model,
-    year=m.year,
-    color=m.color,
-    engine_cc=m.engine_cc,
-            status=m.status or "active",
-            mileage=m.mileage or 0,
-            last_maintenance=m.last_maintenance,
-            next_maintenance=m.next_maintenance,
-driver_id=m.driver_id,
-    )
-    out.append(item)
-    return out
+        out = []
+        for m in motos:
+            item = MotorcycleResponse(
+                id=m.id,
+                plate=m.plate,
+                brand=m.brand,
+                model=m.model,
+                year=m.year,
+                color=m.color,
+                engine_cc=m.engine_cc,
+                status=m.status or "active",
+                mileage=m.mileage or 0,
+                last_maintenance=m.last_maintenance,
+                next_maintenance=m.next_maintenance,
+                driver_id=m.driver_id,
+                driver_name=None,
+            )
+            out.append(item)
+        return out
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise
 
 
 @router.post("", response_model=MotorcycleResponse, status_code=201)
@@ -143,16 +149,17 @@ async def create_motorcycle(
     await db.refresh(moto)
 
     return MotorcycleResponse(
-    id=moto.id,
-    plate=moto.plate,
-    brand=moto.brand,
-    model=moto.model,
-    year=moto.year,
-    color=moto.color,
-    engine_cc=moto.engine_cc,
-    status=moto.status or "active",
-    mileage=moto.mileage or 0,
-    driver_id=moto.driver_id,
+        id=moto.id,
+        plate=moto.plate,
+        brand=moto.brand,
+        model=moto.model,
+        year=moto.year,
+        color=moto.color,
+        engine_cc=moto.engine_cc,
+        status=moto.status or "active",
+        mileage=moto.mileage or 0,
+        driver_id=moto.driver_id,
+        driver_name=None,
     )
 
 
@@ -169,18 +176,19 @@ async def get_motorcycle(
     if not moto:
         raise HTTPException(status_code=404, detail="Motocicleta no encontrada")
     return MotorcycleResponse(
-    id=moto.id,
-    plate=moto.plate,
-    brand=moto.brand,
-    model=moto.model,
-    year=moto.year,
-    color=moto.color,
-    engine_cc=moto.engine_cc,
-    status=moto.status or "active",
-    mileage=moto.mileage or 0,
-    last_maintenance=moto.last_maintenance,
-    next_maintenance=moto.next_maintenance,
-    driver_id=moto.driver_id,
+        id=moto.id,
+        plate=moto.plate,
+        brand=moto.brand,
+        model=moto.model,
+        year=moto.year,
+        color=moto.color,
+        engine_cc=moto.engine_cc,
+        status=moto.status or "active",
+        mileage=moto.mileage or 0,
+        last_maintenance=moto.last_maintenance,
+        next_maintenance=moto.next_maintenance,
+        driver_id=moto.driver_id,
+        driver_name=None,
     )
 
 
@@ -207,7 +215,7 @@ async def update_motorcycle(
     await db.commit()
     await db.refresh(moto)
     return MotorcycleResponse(
-        id=str(moto.id),
+        id=moto.id,
         plate=moto.plate,
         brand=moto.brand,
         model=moto.model,
@@ -218,7 +226,8 @@ async def update_motorcycle(
         mileage=moto.mileage or 0,
         last_maintenance=moto.last_maintenance,
         next_maintenance=moto.next_maintenance,
-        driver_id=str(moto.driver_id) if moto.driver_id else None,
+        driver_id=moto.driver_id,
+        driver_name=None,
     )
 
 

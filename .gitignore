@@ -1,35 +1,6 @@
-# Python
+# Solo excluir lo que GitHub no permite (archivos binarios masivos que se regeneran)
+backend/.venv/
+frontend/node_modules/
+*.pyc
 __pycache__/
-*.py[cod]
-*.egg-info/
-.eggs/
-dist/
-build/
-*.egg
-.venv/
-venv/
-env/
-
-# Environment
-.env
-*.env
-.env.local
-.env.production
-
-# Uploads
-uploads/
-
-# Node
-node_modules/
-dist/
-
-# IDE
-.vscode/
-.idea/
-
-# OS
-.DS_Store
-Thumbs.db
-
-# Redis dump
-dump.rdb
+.git/

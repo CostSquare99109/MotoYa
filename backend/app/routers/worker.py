@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.models.drivers import Driver
+from app.models.driver_location import DriverLocation
 from app.models.finances import Earning
 from app.models.trips import Trip, TripStatusHistory
 from app.models.users import User
@@ -165,6 +166,24 @@ async def update_worker_status(
     driver = await get_driver_from_user(current_user, db)
     driver.is_online = payload.is_online
     driver.last_seen = datetime.now(UTC)
+
+    # Sincronizar is_online en driver_locations
+    loc_result = await db.execute(
+        select(DriverLocation).where(DriverLocation.driver_id == driver.id)
+    )
+    driver_loc = loc_result.scalar_one_or_none()
+    if driver_loc:
+        driver_loc.is_online = payload.is_online
+    elif payload.is_online:
+        # Crear registro de ubicación si no existe
+        new_loc = DriverLocation(
+            driver_id=driver.id,
+            latitude=7.9789,
+            longitude=-76.6593,
+            is_online=True,
+        )
+        db.add(new_loc)
+
     await db.commit()
     return {"is_online": driver.is_online, "message": "Estado actualizado"}
 

@@ -2,14 +2,11 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from datetime import datetime
 
 from pydantic import BaseModel, EmailStr, Field, field_validator
 
 from app.schemas.validators import validate_name, validate_phone
-
-if TYPE_CHECKING:
- from datetime import datetime
 
 # ── Registro de cliente ───────────────────────────────────────────────────────
 
@@ -66,7 +63,7 @@ class TripRequestSchema(BaseModel):
     dropoff_address: str = Field(..., min_length=5)
     dropoff_lat: float
     dropoff_lng: float
-    payment_method: str = Field(default="cash", pattern="^(cash|wallet)$")
+    payment_method: str = Field(default="cash", pattern="^(cash|nequi|daviplata|card|wallet)$")
     notes: str | None = None
 
 

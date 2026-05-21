@@ -61,10 +61,10 @@ export default function Fleet() {
   const fetchFleet = useCallback(async () => {
     setLoading(true); setError("");
     try {
-      const res = await fetch(`${API}/api/motorcycles`, { headers: authHeaders() });
-      if (!res.ok) throw new Error(`Error ${res.status}`);
-      const data = await res.json();
-      setFleet(Array.isArray(data) ? data : data.motorcycles ?? []);
+ const res = await fetch(`${API}/api/motorcycles`, { headers: authHeaders() });
+ if (!res.ok) throw new Error(`Error ${res.status}`);
+ const data = await res.json();
+ setFleet(Array.isArray(data) ? data : data.motorcycles ?? []);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Error al cargar flota");
     } finally { setLoading(false); }

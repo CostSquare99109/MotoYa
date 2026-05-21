@@ -3,8 +3,9 @@
 import uuid
 from datetime import UTC, datetime
 
+from geoalchemy2 import Geography
 from sqlalchemy import Column, DateTime, ForeignKey, Integer, Numeric, String, Text
-from app.models.types import GeographyCompat, GUID
+from app.models.types import GUID
 
 from app.database import Base
 
@@ -16,16 +17,16 @@ class Trip(Base):
     driver_id = Column(GUID, ForeignKey("drivers.id"))
     passenger_name = Column(String(100))
     passenger_phone = Column(String(20))
-    pickup_location = Column(GeographyCompat(), nullable=False)
+    pickup_location = Column(Geography("POINT", srid=4326), nullable=False)
     pickup_address = Column(Text, nullable=False)
-    dropoff_location = Column(GeographyCompat(), nullable=False)
+    dropoff_location = Column(Geography("POINT", srid=4326), nullable=False)
     dropoff_address = Column(Text, nullable=False)
-    status = Column(String(20), default="pending")  # pending, assigned, picked_up, in_progress, completed, cancelled
+    status = Column(String(20), default="pending") # pending, assigned, picked_up, in_progress, completed, cancelled
     fare = Column(Numeric(10, 2))
     commission = Column(Numeric(10, 2))
     distance_km = Column(Numeric(6, 2))
     duration_min = Column(Integer)
-    payment_method = Column(String(20), default="cash")  # cash, card, wallet
+    payment_method = Column(String(20), default="cash") # cash, card, wallet
     rating = Column(Integer)
     notes = Column(Text)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
