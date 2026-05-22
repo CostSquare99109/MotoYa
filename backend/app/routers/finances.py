@@ -20,11 +20,42 @@ router = APIRouter(prefix="/finances", tags=["finances"])
 
 @router.get("/summary", response_model=FinanceSummary)
 async def get_finance_summary(
-    period: str | None = Query(None, description="YYYY-MM format"),
+    period: str | None = Query(None, description="YYYY-MM format or 'today'"),
+    today: bool = Query(False, description="Get today's summary instead of monthly"),
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_user)
+    _: User = Depends(get_current_user),
 ):
-    """Get overall earnings summary."""
+    """Get overall earnings summary. Use ?today=true for today's data."""
+    today_start = datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
+
+    if today or period == "today":
+        # Resumen del dia de hoy
+        result = await db.execute(
+            select(
+                func.coalesce(func.sum(Earning.gross_amount), 0).label("total_gross"),
+                func.coalesce(func.sum(Earning.commission_amount), 0).label("total_commissions"),
+                func.coalesce(func.sum(Earning.fuel_cost), 0).label("total_fuel"),
+                func.coalesce(func.sum(Earning.net_amount), 0).label("total_net"),
+                func.count(Earning.id).label("trip_count"),
+            ).where(Earning.created_at >= today_start)
+        )
+        row = result.first()
+
+        avg_per_trip = 0
+        if row.trip_count > 0:
+            avg_per_trip = round(float(row.total_net) / row.trip_count, 2)
+
+        return FinanceSummary(
+            total_gross=round(float(row.total_gross), 2),
+            total_commissions=round(float(row.total_commissions), 2),
+            total_fuel=round(float(row.total_fuel), 2),
+            total_net=round(float(row.total_net), 2),
+            trip_count=row.trip_count,
+            avg_per_trip=avg_per_trip,
+            period=datetime.now(UTC).strftime("%Y-%m-%d"),
+        )
+
+    # Resumen mensual
     if not period:
         period = datetime.now(UTC).strftime("%Y-%m")
 
@@ -34,7 +65,7 @@ async def get_finance_summary(
             func.coalesce(func.sum(Earning.commission_amount), 0).label("total_commissions"),
             func.coalesce(func.sum(Earning.fuel_cost), 0).label("total_fuel"),
             func.coalesce(func.sum(Earning.net_amount), 0).label("total_net"),
-            func.count(Earning.id).label("trip_count")
+            func.count(Earning.id).label("trip_count"),
         ).where(Earning.period == period)
     )
     row = result.first()
@@ -50,18 +81,18 @@ async def get_finance_summary(
         total_net=round(float(row.total_net), 2),
         trip_count=row.trip_count,
         avg_per_trip=avg_per_trip,
-        period=period
+        period=period,
     )
 
 
 @router.get("/driver/{driver_id}", response_model=DriverFinanceDetail)
-async def get_driver_finance(
+async def get_driver_finance_detail(
     driver_id: uuid.UUID,
-    period: str | None = Query(None),
+    period: str | None = Query(None, description="YYYY-MM format"),
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_user)
+    _: User = Depends(get_current_user),
 ):
-    """Get earnings breakdown for a specific driver."""
+    """Get detailed finance info for a specific driver."""
     if not period:
         period = datetime.now(UTC).strftime("%Y-%m")
 
@@ -80,7 +111,7 @@ async def get_driver_finance(
             func.coalesce(func.sum(Earning.commission_amount), 0).label("commission"),
             func.coalesce(func.sum(Earning.fuel_cost), 0).label("fuel"),
             func.coalesce(func.sum(Earning.net_amount), 0).label("net"),
-            func.count(Earning.id).label("count")
+            func.count(Earning.id).label("count"),
         ).where(
             and_(Earning.driver_id == driver_id, Earning.period == period)
         )
@@ -101,7 +132,7 @@ async def get_driver_finance(
         fuel_cost=round(float(row.fuel), 2),
         net_amount=round(float(row.net), 2),
         trip_count=row.count,
-        current_tier=tier
+        current_tier=tier,
     )
 
 
@@ -109,7 +140,7 @@ async def get_driver_finance(
 async def create_earning(
     data: EarningCreate,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_user)
+    _: User = Depends(get_current_user),
 ):
     """Record an earning entry with auto-calculated net amount."""
     # Auto-calculate commission based on tier
@@ -134,7 +165,7 @@ async def create_earning(
         commission_amount=commission,
         fuel_cost=data.fuel_cost,
         net_amount=net_amount,
-        period=period
+        period=period,
     )
     db.add(earning)
     await db.commit()
@@ -147,7 +178,7 @@ async def get_period_report(
     start_period: str = Query(..., description="YYYY-MM"),
     end_period: str = Query(..., description="YYYY-MM"),
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_user)
+    _: User = Depends(get_current_user),
 ):
     """Get earnings report across multiple periods."""
     result = await db.execute(
@@ -157,7 +188,7 @@ async def get_period_report(
             func.coalesce(func.sum(Earning.commission_amount), 0).label("commission"),
             func.coalesce(func.sum(Earning.fuel_cost), 0).label("fuel"),
             func.coalesce(func.sum(Earning.net_amount), 0).label("net"),
-            func.count(Earning.id).label("count")
+            func.count(Earning.id).label("count"),
         ).where(
             and_(Earning.period >= start_period, Earning.period <= end_period)
         ).group_by(Earning.period).order_by(Earning.period)
@@ -174,7 +205,7 @@ async def get_period_report(
             total_net=round(net, 2),
             trip_count=count,
             avg_per_trip=round(net / count, 2) if count > 0 else 0,
-            period=row.period
+            period=row.period,
         ))
 
     return summaries

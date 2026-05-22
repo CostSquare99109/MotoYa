@@ -121,6 +121,54 @@ async def get_trip_stats(
     )
 
 
+@router.get("/stats/avg-response-time")
+async def get_avg_response_time(
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """
+    Tiempo promedio de respuesta hoy (en segundos).
+    Mide el tiempo entre 'pending' y 'assigned' o 'in_progress' para viajes de hoy.
+    """
+    today = datetime.now(UTC).date()
+    today_start = datetime(today.year, today.month, today.day)
+
+    # Obtener viajes de hoy que pasaron de pending a assigned/in_progress
+    result = await db.execute(
+        select(Trip).where(
+            and_(
+                Trip.created_at >= today_start,
+                Trip.status.in_(["assigned", "in_progress", "completed", "en_route"]),
+            )
+        )
+    )
+    trips_today = result.scalars().all()
+
+    response_times = []
+    for trip in trips_today:
+        # Buscar la primera vez que el viaje estuvo en 'assigned' o 'in_progress'
+        hist_result = await db.execute(
+            select(TripStatusHistory.changed_at).where(
+                and_(
+                    TripStatusHistory.trip_id == trip.id,
+                    TripStatusHistory.status.in_(["assigned", "in_progress"]),
+                )
+            ).order_by(TripStatusHistory.changed_at.asc()).limit(1)
+        )
+        first_response = hist_result.scalar_one_or_none()
+        if first_response and trip.created_at:
+            delta = (first_response - trip.created_at).total_seconds()
+            if delta >= 0:
+                response_times.append(delta)
+
+    if response_times:
+        avg_seconds = round(sum(response_times) / len(response_times), 1)
+    else:
+        avg_seconds = 0
+
+    return {"avg_response_seconds": avg_seconds, "sample_count": len(response_times)}
+
+
 @router.get("/latest/assignments")
 async def get_latest_assignments(
     limit: int = Query(10, ge=1, le=50),
@@ -186,11 +234,16 @@ async def update_trip_status(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user)
 ):
-    """Update trip status."""
+    """Update trip status. When status='completed', auto-create earning + update ranking."""
+    from app.models.finances import Earning
+    from app.models.notifications import Notification
+
     result = await db.execute(select(Trip).where(Trip.id == trip_id))
     trip = result.scalar_one_or_none()
     if not trip:
         raise HTTPException(status_code=404, detail="Viaje no encontrado")
+
+    old_status = trip.status
 
     if data.status:
         trip.status = data.status
@@ -220,6 +273,61 @@ async def update_trip_status(
 
     if data.rating:
         trip.rating = data.rating
+
+    # ── Cuando el viaje se completa: crear earning + actualizar ranking + notificar ──
+    if data.status == "completed" and trip.driver_id and trip.fare:
+        # 1. Obtener tier y calcular comisión
+        rank_res = await db.execute(
+            select(Ranking).where(Ranking.driver_id == trip.driver_id)
+        )
+        rank = rank_res.scalar_one_or_none()
+        tier = rank.tier if rank else "bronze"
+        rate = _TIER_COMMISSION.get(tier, _DEFAULT_COMMISSION)
+        commission = float(trip.fare) * rate
+        fuel_cost = 0  # Se puede agregar después
+        net_amount = float(trip.fare) - commission - fuel_cost
+        period = datetime.now(UTC).strftime("%Y-%m")
+
+        # 2. Crear earning
+        earning = Earning(
+            driver_id=trip.driver_id,
+            trip_id=trip.id,
+            gross_amount=float(trip.fare),
+            commission_amount=commission,
+            fuel_cost=fuel_cost,
+            net_amount=net_amount,
+            period=period,
+        )
+        db.add(earning)
+
+        # 3. Actualizar ranking (sumar puntos + viajes)
+        if not rank:
+            rank = Ranking(driver_id=trip.driver_id, points=10, monthly_trips=1, weekly_trips=1)
+            db.add(rank)
+        else:
+            rank.points = (rank.points or 0) + 10
+            rank.monthly_trips = (rank.monthly_trips or 0) + 1
+            rank.weekly_trips = (rank.weekly_trips or 0) + 1
+            # Recalcular tier
+            if rank.points >= 3000:
+                rank.tier = "platinum"
+            elif rank.points >= 1500:
+                rank.tier = "gold"
+            elif rank.points >= 500:
+                rank.tier = "silver"
+            else:
+                rank.tier = "bronze"
+
+        # 4. Crear notificación
+        d_res = await db.execute(select(Driver.full_name).where(Driver.id == trip.driver_id))
+        driver_name = d_res.scalar() or "Conductor"
+        notif = Notification(
+            type="trip",
+            title="Viaje completado",
+            message=f"{driver_name} completó el viaje {str(trip_id)[:8]}... — ${float(trip.fare):,.0f} COP",
+            data={"trip_id": str(trip_id), "driver_id": str(trip.driver_id), "fare": float(trip.fare)},
+        )
+        db.add(notif)
 
     await db.commit()
     return {"message": "Viaje actualizado", "trip_id": str(trip_id), "status": trip.status}

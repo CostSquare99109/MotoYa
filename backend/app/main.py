@@ -16,15 +16,16 @@ import app.models  # noqa: F401 — register all models with Base.metadata
 
 from app.routers import (
  auth,
-    dispatch,
-    drivers,
-    emergency,
-    finances,
-    motorcycles,
-    rankings,
-    shipments,
-    trips,
-    worker,
+ dispatch,
+ drivers,
+ emergency,
+ finances,
+ motorcycles,
+ notifications,
+ rankings,
+ shipments,
+ trips,
+ worker,
 )
 from app.routers import client as client_router
 from app.routers import location as location_router
@@ -76,6 +77,7 @@ app.include_router(finances.router, prefix="/api", tags=["finances"])
 app.include_router(rankings.router, prefix="/api", tags=["rankings"])
 app.include_router(emergency.router, prefix="/api", tags=["emergency"])
 app.include_router(settings_router.router, prefix="/api", tags=["settings"])
+app.include_router(notifications.router, prefix="/api", tags=["notifications"])
 app.include_router(motorcycles.router, prefix="/api", tags=["motorcycles"])
 app.include_router(client_router.router, prefix="/api", tags=["client"])
 app.include_router(location_router.router, prefix="/api", tags=["location"])

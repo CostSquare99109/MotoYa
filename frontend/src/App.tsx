@@ -37,7 +37,7 @@ function AdminLayout({ children }: { children: React.ReactNode }) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-[#f8fafc]">
+    <div className="flex h-screen w-screen overflow-hidden bg-[#f8fafc] dark:bg-slate-950">
       <Sidebar
         collapsed={sidebarCollapsed}
         onToggle={() => setSidebarCollapsed((v) => !v)}

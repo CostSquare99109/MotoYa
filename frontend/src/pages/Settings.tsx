@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+ Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import {
  Settings, Bell, Shield, MapPin, Save, Globe,
@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 
 import { API_BASE as API, getAuthToken } from "@/lib/apiConfig";
+import { useTheme } from "@/hooks/useTheme";
 
 const defaultSettings = {
   general: {
@@ -42,9 +43,10 @@ const defaultSettings = {
 };
 
 export default function SettingsPage() {
-  const [saving, setSaving]   = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [savedOk, setSavedOk] = useState(false);
+ const { isDark, setDarkMode } = useTheme();
+ const [saving, setSaving] = useState(false);
+ const [loading, setLoading] = useState(true);
+ const [savedOk, setSavedOk] = useState(false);
  const [error, setError] = useState("");
 
  const [general, setGeneral] = useState(defaultSettings.general);
@@ -137,13 +139,13 @@ export default function SettingsPage() {
   return (
     <div className="p-6 h-full overflow-auto">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
-          <Settings className="w-6 h-6 text-[#f97316]" />
-          Configuración
-        </h1>
-        <p className="text-sm text-slate-500 mt-1">
-          Administra las preferencias de la plataforma MotoYa · Los cambios se guardan en la base de datos
-        </p>
+ <h1 className="text-2xl font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
+ <Settings className="w-6 h-6 text-[#f97316]" />
+ Configuración
+ </h1>
+ <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+ Administra las preferencias de la plataforma MotoYa · Los cambios se guardan en la base de datos
+ </p>
       </div>
 
       <div className="grid grid-cols-2 gap-6 max-w-4xl">
@@ -209,16 +211,19 @@ export default function SettingsPage() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="flex items-center justify-between">
-              <div>
-                <Label>Modo oscuro</Label>
-                <p className="text-xs text-slate-500">Cambiar tema de la interfaz</p>
-              </div>
-              <Switch
-                checked={general.darkMode}
-                onCheckedChange={(v) => setGeneral({ ...general, darkMode: v })}
-              />
-            </div>
+ <div className="flex items-center justify-between">
+ <div>
+ <Label>Modo oscuro</Label>
+ <p className="text-xs text-slate-500 dark:text-slate-400">Cambiar tema de la interfaz</p>
+ </div>
+ <Switch
+ checked={isDark}
+ onCheckedChange={(v) => {
+ setDarkMode(v);
+ setGeneral({ ...general, darkMode: v });
+ }}
+ />
+ </div>
           </CardContent>
         </Card>
 
